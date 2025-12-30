@@ -4,6 +4,9 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { LoggerModule } from './logger/logger.module';
+import { AudioModule } from './audio/audio.module';
+import { CurriculumModule } from './curriculum/curriculum.module';
 
 @Module({
   imports: [
@@ -13,6 +16,16 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       isGlobal: true,
     }),
 
+    // TypeOrmModule.forRootAsync({
+    //   inject: [ConfigService],
+    //   useFactory: (config: ConfigService) => ({
+    //     type: 'postgres',
+    //     url: config.get<string>('DATABASE_URL'),
+    //     autoLoadEntities: true,
+    //     synchronize: false,
+    //   }),
+    // }),
+
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -20,8 +33,21 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         url: config.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
         synchronize: false,
+        ssl: {
+          rejectUnauthorized: false,
+        },
+        extra: {
+          connectionTimeoutMillis: 10000,
+          max: 5,
+        },
       }),
     }),
+
+    LoggerModule,
+
+    AudioModule,
+
+    CurriculumModule,
   ],
   controllers: [AppController],
   providers: [AppService],
