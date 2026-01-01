@@ -14,5 +14,6 @@ import { CurriculumService } from 'src/curriculum/curriculum.service';
   ],
   controllers: [CurriculumController],
   providers: [CurriculumService],
+  exports: [CurriculumService],
 })
 export class CurriculumModule {}
