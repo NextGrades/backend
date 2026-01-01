@@ -7,6 +7,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerModule } from './logger/logger.module';
 import { AudioModule } from './audio/audio.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
+import { AgentModule } from './agent/agent.module';
 
 @Module({
   imports: [
@@ -48,6 +49,8 @@ import { CurriculumModule } from './curriculum/curriculum.module';
     AudioModule,
 
     CurriculumModule,
+
+    AgentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -9,7 +9,11 @@ export class ClassLevel {
   @Column({ unique: true })
   name: string;
 
-  @Column()
+  @Column({
+    name: 'sort_order',
+    type: 'int',
+    unique: true,
+  })
   sortOrder: number;
 
   @OneToMany(() => Theme, (theme: Theme) => theme.classLevel)
