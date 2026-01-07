@@ -56,7 +56,7 @@ export class CurriculumService {
       .andWhere('cl.sort_order = :classLevel', { classLevel })
       .getMany();
 
-    console.log('CurriculumService.getCurriculum - data:', data);
+    // console.log('CurriculumService.getCurriculum - data:', data);
 
     const learningObjectives = data.map((topic) => ({
       id: topic.id,
@@ -71,6 +71,10 @@ export class CurriculumService {
       evaluationGuide: topic.evaluationGuide,
     }));
 
+    console.log(
+      'CurriculumService.getCurriculum - learningObjectives:',
+      learningObjectives,
+    );
     return learningObjectives;
   }
 

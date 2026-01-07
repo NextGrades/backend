@@ -27,6 +27,15 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter(httpAdapter));
 
+  app.getHttpAdapter().get('/health', (req, res: Response) => {
+    res.status(200).json({
+      status: 'ok',
+      pid: process.pid,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   // Redirect requests from root to /api/v1
   app.getHttpAdapter().get('/', (req, res: Response) => {
     res.redirect('/api/v1');

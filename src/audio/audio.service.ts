@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { Readable } from 'stream';
 
@@ -16,7 +13,7 @@ export class AudioService {
     return { tts, OUTPUT_FORMAT };
   }
 
-  async speak(text: string, voice = 'en-NG-EzinneNeural'): Promise<Readable> {
+  async speak(text: string, voice = 'en-GB-SoniaNeural'): Promise<Readable> {
     try {
       if (!text || text.trim().length === 0) {
         throw new Error('Text cannot be empty');

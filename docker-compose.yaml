@@ -1,0 +1,7 @@
+services:
+  api:
+    image: ngrades-server:v1.0.0
+    ports:
+      - "7500:7500"
+    env_file:
+      - .env
