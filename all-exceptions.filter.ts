@@ -3,12 +3,14 @@ import {
   ArgumentsHost,
   HttpStatus,
   HttpException,
+  Inject,
 } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
 import { Request, Response } from 'express';
 import { QueryFailedError, EntityNotFoundError, TypeORMError } from 'typeorm';
-import { MyLoggerService } from 'src/logger/logger.service';
 import { ConfigService } from '@nestjs/config';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { LoggerService } from '@nestjs/common';
 import { handleTypeORMError } from 'src/utils/typeorm.util';
 
 type MyResponseObj = {
@@ -28,14 +30,21 @@ interface PostgresError extends Error {
 
 @Catch()
 export class AllExceptionsFilter extends BaseExceptionFilter {
-  private readonly logger = new MyLoggerService(AllExceptionsFilter.name);
-  private readonly configService = new ConfigService();
+  constructor(
+    @Inject(WINSTON_MODULE_NEST_PROVIDER)
+    private readonly logger: LoggerService,
+
+    private readonly configService: ConfigService,
+  ) {
+    super();
+  }
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
+    const request = ctx.getRequest<Request & { requestId?: string }>();
     const environment = this.configService.get<string>('NODE_ENV');
+    console.log(request.requestId);
 
     const myResponseObj: MyResponseObj = {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -44,8 +53,8 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
       response: 'Internal Server Error',
     };
 
+    /* ---------------- HTTP EXCEPTIONS ---------------- */
     if (exception instanceof HttpException) {
-      // Handle HTTP exceptions (e.g., class-validator errors)
       myResponseObj.statusCode = exception.getStatus();
       const errorResponse = exception.getResponse();
 
@@ -54,11 +63,12 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
           ? { message: errorResponse }
           : errorResponse;
     } else if (exception instanceof QueryFailedError) {
-      // Handle TypeORM query errors (PostgreSQL)
+      /* ---------------- TYPEORM: QUERY FAILED ---------------- */
       const driverError = exception.driverError as PostgresError;
 
+      myResponseObj.statusCode = HttpStatus.UNPROCESSABLE_ENTITY;
+
       if (environment === 'development') {
-        myResponseObj.statusCode = HttpStatus.UNPROCESSABLE_ENTITY;
         myResponseObj.response = {
           message: exception.message,
           code: driverError.code,
@@ -68,47 +78,51 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
         };
       } else {
         const error = handleTypeORMError(exception as QueryFailedError<Error>);
-        myResponseObj.statusCode = HttpStatus.UNPROCESSABLE_ENTITY;
         myResponseObj.response = {
           message: error.message,
           code: error.code,
         };
       }
     } else if (exception instanceof EntityNotFoundError) {
-      // Handle entity not found errors
+      /* ---------------- TYPEORM: ENTITY NOT FOUND ---------------- */
       myResponseObj.statusCode = HttpStatus.NOT_FOUND;
       myResponseObj.response = {
         message: exception.message,
       };
     } else if (exception instanceof TypeORMError) {
-      // Handle other TypeORM-specific errors
+      /* ---------------- TYPEORM: GENERIC ---------------- */
       myResponseObj.statusCode = HttpStatus.BAD_REQUEST;
       myResponseObj.response = {
         message: exception.message,
       };
     } else if (exception instanceof Error) {
+      /* ---------------- GENERIC ERROR ---------------- */
       myResponseObj.statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
       myResponseObj.response = {
         message: exception.message,
-        stack: environment === 'development' ? exception.stack : undefined,
+        ...(environment === 'development' && { stack: exception.stack }),
       };
     } else {
-      // Catch all other unexpected errors
-      console.error('Unexpected exception:', exception);
+      /* ---------------- UNKNOWN ---------------- */
       myResponseObj.response = {
         message: 'An unexpected error occurred',
       };
     }
 
-    // Log the error for debugging
+    /* ---------------- STRUCTURED LOGGING ---------------- */
     this.logger.error(
-      JSON.stringify({
-        ...myResponseObj,
-      }),
+      'Unhandled exception',
+      exception instanceof Error ? exception.stack : undefined,
       AllExceptionsFilter.name,
+      {
+        requestId: request.requestId,
+        method: request.method,
+        url: request.originalUrl,
+        statusCode: myResponseObj.statusCode,
+        response: myResponseObj.response,
+      },
     );
 
-    // Send response
     response.status(myResponseObj.statusCode).json(myResponseObj);
   }
 }

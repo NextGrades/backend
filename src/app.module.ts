@@ -8,6 +8,10 @@ import { LoggerModule } from './logger/logger.module';
 import { AudioModule } from './audio/audio.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { AgentModule } from './agent/agent.module';
+import { RedisModule } from './redis/redis.module';
+import { AllExceptionsFilter } from 'all-exceptions.filter';
+import { APP_FILTER } from '@nestjs/core';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -16,16 +20,6 @@ import { AgentModule } from './agent/agent.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-
-    // TypeOrmModule.forRootAsync({
-    //   inject: [ConfigService],
-    //   useFactory: (config: ConfigService) => ({
-    //     type: 'postgres',
-    //     url: config.get<string>('DATABASE_URL'),
-    //     autoLoadEntities: true,
-    //     synchronize: false,
-    //   }),
-    // }),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -51,8 +45,18 @@ import { AgentModule } from './agent/agent.module';
     CurriculumModule,
 
     AgentModule,
+
+    RedisModule,
+
+    UsersModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+  ],
 })
 export class AppModule {}
