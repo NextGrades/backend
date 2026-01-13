@@ -4,7 +4,7 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { Request } from 'express';
 
 @Injectable({ scope: Scope.REQUEST })
-export class RequestLoggerService implements LoggerService {
+export class HttpLogger implements LoggerService {
   constructor(
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
@@ -13,31 +13,35 @@ export class RequestLoggerService implements LoggerService {
     private readonly request: Request & { requestId?: string },
   ) {}
 
-  private get contextMeta() {
+  private build(message: unknown, context?: string) {
     return {
+      message,
+      context,
+      scope: 'http',
       requestId: this.request.requestId,
       method: this.request.method,
       url: this.request.originalUrl,
+      ip: this.request.ip,
+      userAgent: this.request.headers['user-agent'],
     };
   }
 
   log(message: any, context?: string) {
-    this.logger.log(message, context ?? undefined, this.contextMeta);
+    this.logger.log(this.build(message, context));
   }
 
   error(message: any, trace?: string, context?: string) {
-    this.logger.error(message, trace, context ?? undefined, this.contextMeta);
+    this.logger.error({
+      ...this.build(message, context),
+      trace,
+    });
   }
 
   warn(message: any, context?: string) {
-    this.logger.warn(message, context ?? undefined, this.contextMeta);
+    this.logger.warn(this.build(message, context));
   }
 
   debug(message: any, context?: string) {
-    this.logger.debug?.(message, context ?? undefined, this.contextMeta);
-  }
-
-  verbose(message: any, context?: string) {
-    this.logger.verbose?.(message, context ?? undefined, this.contextMeta);
+    this.logger.debug?.(this.build(message, context));
   }
 }

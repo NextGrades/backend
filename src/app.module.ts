@@ -12,6 +12,7 @@ import { RedisModule } from './redis/redis.module';
 import { AllExceptionsFilter } from 'all-exceptions.filter';
 import { APP_FILTER } from '@nestjs/core';
 import { UsersModule } from './users/users.module';
+import { DatabaseModule } from './database/database.module';
 
 @Module({
   imports: [
@@ -49,6 +50,8 @@ import { UsersModule } from './users/users.module';
     RedisModule,
 
     UsersModule,
+
+    DatabaseModule,
   ],
   controllers: [AppController],
   providers: [

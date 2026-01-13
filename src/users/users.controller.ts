@@ -11,11 +11,11 @@ import {
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ok } from 'src/common/http/response.helpers';
-import { UserService } from 'src/users/users.service';
+import { UsersService } from 'src/users/users.service';
 
 @Controller('users')
-export class UserController {
-  constructor(private readonly userService: UserService) {}
+export class UsersController {
+  constructor(private readonly userService: UsersService) {}
 
   @Post()
   async create(@Body() dto: CreateUserDto) {

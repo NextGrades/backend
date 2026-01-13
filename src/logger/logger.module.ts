@@ -8,13 +8,14 @@ import {
 import { WinstonModule } from 'nest-winston';
 import { winstonConfig } from './winston.config';
 import { RequestIdMiddleware } from 'src/logger/request-id.middleware';
-import { RequestLoggerService } from 'src/logger/request-logger.service';
+import { SystemLogger } from 'src/logger/system-logger.service';
+import { HttpLogger } from 'src/logger/http-logger.service';
 
 @Global()
 @Module({
   imports: [WinstonModule.forRoot(winstonConfig)],
-  providers: [RequestLoggerService],
-  exports: [RequestLoggerService],
+  providers: [HttpLogger, SystemLogger],
+  exports: [HttpLogger, SystemLogger],
 })
 export class LoggerModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

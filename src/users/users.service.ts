@@ -12,7 +12,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
-export class UserService {
+export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -44,6 +44,18 @@ export class UserService {
   async findOne(id: string): Promise<User> {
     const user = await this.userRepo.findOne({
       where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  async findByEmail(email: string): Promise<User> {
+    const user = await this.userRepo.findOne({
+      where: { email },
     });
 
     if (!user) {

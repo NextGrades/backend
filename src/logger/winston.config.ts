@@ -33,7 +33,11 @@ export const winstonConfig = {
             filename: 'logs/combined.log',
           }),
         ]
-      : []),
+      : [
+          new winston.transports.File({
+            filename: 'logs/combined.log',
+          }),
+        ]),
   ],
   exceptionHandlers: [
     new winston.transports.File({ filename: 'exception.log' }),
