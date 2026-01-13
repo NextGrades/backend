@@ -25,6 +25,9 @@ export class User {
   @Column({ length: 100 })
   lastName: string;
 
+  @Column({ type: 'int' })
+  classLevel: number;
+
   @Index({ unique: true })
   @Column({ length: 150 })
   email: string;

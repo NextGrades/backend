@@ -5,3 +5,26 @@ services:
       - "7500:7500"
     env_file:
       - .env
+    depends_on:
+      - redis
+    networks:
+      - ngrades-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ngrades-redis
+    ports:
+      - "6380:6379" # Host:Container (no clash with Credora)
+    networks:
+      - ngrades-network
+    volumes:
+      - ngrades_redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  ngrades_redis_data:
+
+
+networks:
+  ngrades-network:
+    driver: bridge

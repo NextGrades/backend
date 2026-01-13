@@ -8,6 +8,7 @@ import { AuthResponse, JwtPayload } from 'src/auth/types/auth.types';
 import { HttpLogger } from 'src/logger/http-logger.service';
 
 import { User } from 'src/users/entities/user.entity';
+import { PublicUser } from 'src/users/user.types';
 import { UsersService } from 'src/users/users.service';
 
 @Injectable()
@@ -20,7 +21,7 @@ export class AuthService {
   ) {}
 
   /* -------------------- REGISTER -------------------- */
-  async register(dto: RegisterDto): Promise<User> {
+  async register(dto: RegisterDto): Promise<PublicUser> {
     const user = await this.userService.create(dto);
     this.logger.log(`New user registered: ${user.email}`, this.context);
     return user;

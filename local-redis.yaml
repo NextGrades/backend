@@ -1,0 +1,13 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ngrades-redis-standalone
+    ports:
+      - "6380:6379" 
+    volumes:
+      - ngrades_redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  ngrades_redis_data:
