@@ -6,7 +6,7 @@ import { MemorySaver } from '@langchain/langgraph';
 import { createAgent } from 'langchain';
 import { CurriculumService } from 'src/curriculum/curriculum.service';
 import { createCurriculumTools } from 'src/agent/tools/curriculum.tools';
-import { createUserTools } from 'src/agent/tools/userTools.tools';
+import { createUserTools } from 'src/agent/tools/user.tools';
 import { ExerciseType } from 'src/agent/interface/agent.interface';
 import { responseFormatMap } from 'src/agent/schema/quick-exercise.schema';
 import { QEPrompt } from 'src/agent/schema/teaching-agent.schema';

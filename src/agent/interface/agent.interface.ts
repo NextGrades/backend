@@ -6,6 +6,21 @@ import {
 } from 'src/agent/schema/quick-exercise.schema';
 import * as z from 'zod';
 
+// src/agent/types/agent-config.type.ts
+export interface AgentConfigurable {
+  thread_id: string;
+}
+
+export interface AgentContext {
+  user_id: string;
+  class_level: number;
+}
+
+export interface AgentConfig {
+  configurable: AgentConfigurable;
+  context: AgentContext;
+}
+
 export interface TeachingResponse {
   topic: string;
   class_level: number;

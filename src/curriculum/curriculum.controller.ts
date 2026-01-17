@@ -11,7 +11,7 @@ export class CurriculumController {
   @Get('subjects')
   async getSubjects() {
     const data = await this.curriculumService.getSubjects();
-    return ok(data);
+    return ok(data, `found ${data.length} items`);
   }
 
   @Get('topics')

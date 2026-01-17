@@ -4,10 +4,11 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { createAgent } from 'langchain';
 import { MemorySaver } from '@langchain/langgraph';
+import { v7 as uuidv7 } from 'uuid';
 import {
   teachingResponseFormat,
   exerciseResponseFormat,
-  QuickExerciseResponse,
+  // QuickExerciseResponse,
   CurriculumPrompt,
 } from 'src/agent/schema/teaching-agent.schema';
 import {
@@ -17,8 +18,11 @@ import {
 } from 'src/agent/interface/agent.interface';
 import { CurriculumService } from 'src/curriculum/curriculum.service';
 
-import { responseFormatMap } from 'src/agent/schema/quick-exercise.schema';
+// import { responseFormatMap } from 'src/agent/schema/quick-exercise.schema';
 import { AgentFactory } from 'src/agent/agent.factory';
+import { HttpLogger } from 'src/logger/http-logger.service';
+import { Queue } from 'bullmq';
+import { InjectQueue } from '@nestjs/bullmq';
 
 @Injectable()
 export class AgentService {
@@ -28,7 +32,10 @@ export class AgentService {
 
   constructor(
     private readonly curriculum: CurriculumService,
+    @InjectQueue('exercise')
+    private readonly exQueue: Queue,
     private agentFactory: AgentFactory,
+    private readonly logger: HttpLogger,
   ) {
     const systemPrompt = CurriculumPrompt;
     const { model, tools } = this.agentFactory.createAgentDeps(this.curriculum);
@@ -49,15 +56,6 @@ export class AgentService {
       checkpointer: this.checkpointer,
       tools: [tools.user.getUserAge, tools.curriculum.getNerdcCurriculum],
     });
-
-    /* ---------------- Quick Exercise ---------------- */
-    // this.quickExerciseAgent = createAgent({
-    //   model,
-    //   systemPrompt: QEPrompt,
-    //   responseFormat: quickExerciseResponseFormat,
-    //   checkpointer: this.checkpointer,
-    //   tools: [tools.user.getUserAge],
-    // });
   }
 
   async teachTopic(
@@ -65,7 +63,10 @@ export class AgentService {
     userId: string,
     threadId = 'edu-thread-1',
   ): Promise<TeachingResponse> {
-    console.log('AgentService.teachTopic - prompt:', prompt);
+    this.logger.log(
+      `Teaching agent invoked for userId: ${userId}, threadId: ${threadId}`,
+      'AgentService.teachTopic',
+    );
     try {
       const response = await this.teachingAgent.invoke(
         {
@@ -79,7 +80,6 @@ export class AgentService {
 
       // Type assertion with validation
       const structuredResponse = response.structuredResponse as unknown;
-      // console.log('Structured Response:', structuredResponse);
 
       // Validate the response matches our expected type
       const validated = teachingResponseFormat.safeParse(structuredResponse);
@@ -87,11 +87,19 @@ export class AgentService {
       if (!validated.success) {
         throw new Error('Invalid teaching response format');
       }
-      console.log('Validated Teaching Response:', validated.data);
+      this.logger.log(
+        `Teaching response validated successfully for userId: ${userId}`,
+        'AgentService.teachTopic',
+      );
       return validated.data;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
+      this.logger.error(
+        `Failed to generate teaching content for userId: ${userId}`,
+        errorMessage,
+        'AgentService.teachTopic',
+      );
       throw new InternalServerErrorException(
         `Failed to generate teaching content: ${errorMessage}`,
       );
@@ -103,6 +111,10 @@ export class AgentService {
     userId: string,
     threadId = 'edu-thread-1',
   ): Promise<ExerciseResponse> {
+    this.logger.log(
+      `Exercise agent invoked for userId: ${userId}, threadId: ${threadId}`,
+      AgentService.name,
+    );
     try {
       const response = await this.exerciseAgent.invoke(
         {
@@ -123,16 +135,91 @@ export class AgentService {
       if (!validated.success) {
         throw new Error('Invalid exercise response format');
       }
-      console.log('Validated Exercise Response:', validated.data);
+      this.logger.log(
+        `Exercise response validated successfully for userId: ${userId}`,
+        AgentService.name,
+      );
       return validated.data;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
+      this.logger.error(
+        `Failed to generate exercises for userId: ${userId}`,
+        errorMessage,
+        AgentService.name,
+      );
       throw new InternalServerErrorException(
         `Failed to generate exercises: ${errorMessage}`,
       );
     }
   }
+
+  //   async generateQuickExercise(
+  //     exerciseType: ExerciseType,
+  //     count: number,
+  //     config: {
+  //       configurable: { thread_id: string };
+  //       context: { user_id: string; class_level: number };
+  //     },
+  //   ): Promise<QuickExerciseResponse> {
+  //     const userPrompt = `
+  // Generate a quick exercise set.
+
+  // Requirements:
+  // - Exercise type: ${exerciseType}
+  // - Number of exercises: ${count}
+  // - General academic skills only
+  // - No teaching or explanations
+  // - Keep it short and simple
+
+  // Proceed.
+  // `;
+
+  //     const messages = [{ role: 'user' as const, content: userPrompt }];
+
+  //     this.logger.log(
+  //       `Quick exercise generator invoked for exerciseType: ${exerciseType}, count: ${count}, userId: ${config.context.user_id}`,
+  //       AgentService.name,
+  //     );
+
+  //     try {
+  //       const agent = this.agentFactory.createExerciseGeneratorAgent(
+  //         exerciseType,
+  //         this.checkpointer,
+  //       );
+  //       const response = await agent.invoke({ messages }, config);
+
+  //       const responseFormat = responseFormatMap[exerciseType];
+
+  //       if (!responseFormat) {
+  //         throw new Error(`Invalid exercise type: ${exerciseType}`);
+  //       }
+
+  //       const validated = responseFormat.safeParse(response.structuredResponse);
+
+  //       if (!validated.success) {
+  //         throw new Error(`Invalid response format: ${validated.error.message}`);
+  //       }
+
+  //       this.logger.log(
+  //         `Quick exercise response validated for exerciseType: ${exerciseType}, userId: ${config.context.user_id}`,
+  //         AgentService.name,
+  //       );
+
+  //       return validated.data as QuickExerciseResponse;
+  //     } catch (error) {
+  //       const errorMessage =
+  //         error instanceof Error ? error.message : 'Unknown error occurred';
+  //       this.logger.error(
+  //         `Failed to generate ${exerciseType} exercises for userId: ${config.context.user_id}`,
+  //         errorMessage,
+  //         AgentService.name,
+  //       );
+  //       throw new InternalServerErrorException(
+  //         `Failed to generate ${exerciseType} exercises: ${errorMessage}`,
+  //       );
+  //     }
+  //   }
 
   async generateQuickExercise(
     exerciseType: ExerciseType,
@@ -141,48 +228,30 @@ export class AgentService {
       configurable: { thread_id: string };
       context: { user_id: string; class_level: number };
     },
-  ): Promise<QuickExerciseResponse> {
-    const userPrompt = `
-Generate a quick exercise set.
+  ) {
+    const jobId = uuidv7();
+    this.logger.log(
+      `Queueing quick exercise jobId=${jobId} exerciseType=${exerciseType} userId=${config.context.user_id}`,
+      AgentService.name,
+    );
 
-Requirements:
-- Exercise type: ${exerciseType}
-- Number of exercises: ${count}
-- General academic skills only
-- No teaching or explanations
-- Keep it short and simple
-
-Proceed.
-`;
-
-    const messages = [{ role: 'user' as const, content: userPrompt }];
-
-    try {
-      const agent = this.agentFactory.createExerciseGeneratorAgent(
+    await this.exQueue.add(
+      'generate-quick-exercise',
+      {
         exerciseType,
-        this.checkpointer,
-      );
-      const response = await agent.invoke({ messages }, config);
+        count,
+        config,
+      },
+      {
+        jobId,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 3000,
+        },
+      },
+    );
 
-      const responseFormat = responseFormatMap[exerciseType];
-
-      if (!responseFormat) {
-        throw new Error(`Invalid exercise type: ${exerciseType}`);
-      }
-
-      const validated = responseFormat.safeParse(response.structuredResponse);
-
-      if (!validated.success) {
-        throw new Error(`Invalid response format: ${validated.error.message}`);
-      }
-
-      return validated.data as QuickExerciseResponse;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error occurred';
-      throw new InternalServerErrorException(
-        `Failed to generate ${exerciseType} exercises: ${errorMessage}`,
-      );
-    }
+    return jobId;
   }
 }

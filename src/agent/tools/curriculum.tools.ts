@@ -58,33 +58,27 @@ export function createCurriculumTools(curriculumService: CurriculumService) {
         'academic-spelling': {
           name: 'Academic Spelling',
           description: 'Student listens to a word and spells it',
-          required_fields: ['word', 'correct_answer'],
+          required_fields: ['word'],
           field_descriptions: {
             word: 'The word to be spelled (will be played as audio to the student)',
-            correct_answer:
-              "The correct spelling of the word (must match 'word' exactly)",
             difficulty: 'Optional difficulty level: easy, medium, or hard',
           },
           examples: [
             {
               word: 'photosynthesis',
-              correct_answer: 'photosynthesis',
               difficulty: 'hard',
             },
             {
               word: 'elephant',
-              correct_answer: 'elephant',
               difficulty: 'easy',
             },
             {
               word: 'government',
-              correct_answer: 'government',
               difficulty: 'medium',
             },
           ],
           rules: [
             'Return ONLY the word field - no sentences or questions',
-            'The correct_answer must match the word exactly',
             'Do NOT include the word in a sentence',
             'Choose words appropriate for the class level',
           ],

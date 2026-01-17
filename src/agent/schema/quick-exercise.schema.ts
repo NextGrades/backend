@@ -12,7 +12,6 @@ export const spellingExerciseResponseFormat = z.object({
   exercises: z.array(
     z.object({
       word: z.string(),
-      correct_answer: z.string(),
       difficulty: z.enum(['easy', 'medium', 'hard']).optional(),
     }),
   ),

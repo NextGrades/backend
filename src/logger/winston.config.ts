@@ -5,6 +5,9 @@ import type { TransformableInfo } from 'logform';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+/**
+ * Filter noisy Nest internals
+ */
 const ignoreNestInternals = format((info: TransformableInfo) => {
   const blockedContexts = new Set([
     'RoutesResolver',
@@ -16,16 +19,16 @@ const ignoreNestInternals = format((info: TransformableInfo) => {
     'TypeOrmModule',
   ]);
 
-  const context = info.context;
-
-  if (typeof context === 'string' && blockedContexts.has(context)) {
+  if (typeof info.context === 'string' && blockedContexts.has(info.context)) {
     return false;
   }
 
   return info;
 });
 
-// Shared format for file transports
+/**
+ * File format (dev only)
+ */
 const fileFormat = winston.format.combine(
   ignoreNestInternals(),
   winston.format.timestamp(),
@@ -33,47 +36,59 @@ const fileFormat = winston.format.combine(
   winston.format.json(),
 );
 
-export const winstonConfig = {
-  transports: [
-    new winston.transports.Console({
-      level: isProduction ? 'info' : 'debug',
-      format: isProduction
-        ? winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.errors({ stack: true }),
-            winston.format.json(),
-          )
-        : winston.format.combine(
-            winston.format.timestamp(),
-            nestWinstonModuleUtilities.format.nestLike('NextGrades', {
-              prettyPrint: true,
-            }),
-          ),
-    }),
+/**
+ * Console transport (always enabled)
+ */
+const consoleTransport = new winston.transports.Console({
+  level: isProduction ? 'info' : 'debug',
+  format: isProduction
+    ? winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json(),
+      )
+    : winston.format.combine(
+        winston.format.timestamp(),
+        nestWinstonModuleUtilities.format.nestLike('NextGrades', {
+          prettyPrint: true,
+        }),
+      ),
+});
 
-    ...(isProduction
+/**
+ * File transports — DEV ONLY
+ */
+const devFileTransports = isProduction
+  ? []
+  : [
+      new winston.transports.File({
+        filename: 'logs/error.log',
+        level: 'error',
+        format: fileFormat,
+      }),
+      new winston.transports.File({
+        filename: 'logs/combined.log',
+        format: fileFormat,
+      }),
+    ];
+
+export const winstonConfig = {
+  transports: [consoleTransport, ...devFileTransports],
+
+  /**
+   * Exceptions:
+   * - Console always
+   * - File only in dev
+   */
+  exceptionHandlers: [
+    new winston.transports.Console(),
+    ...(!isProduction
       ? [
           new winston.transports.File({
-            filename: 'logs/error.log',
-            level: 'error',
-            format: fileFormat,
-          }),
-          new winston.transports.File({
-            filename: 'logs/combined.log',
+            filename: 'logs/exception.log',
             format: fileFormat,
           }),
         ]
-      : [
-          new winston.transports.File({
-            filename: 'logs/combined.log',
-            format: fileFormat,
-          }),
-        ]),
-  ],
-  exceptionHandlers: [
-    new winston.transports.File({
-      filename: 'logs/exception.log',
-      format: fileFormat,
-    }),
+      : []),
   ],
 };
