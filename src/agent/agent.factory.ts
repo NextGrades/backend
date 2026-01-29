@@ -4,12 +4,16 @@ import { ConfigService } from '@nestjs/config';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { MemorySaver } from '@langchain/langgraph';
 import { createAgent } from 'langchain';
-import { CurriculumService } from 'src/curriculum/curriculum.service';
-import { createCurriculumTools } from 'src/agent/tools/curriculum.tools';
 import { createUserTools } from 'src/agent/tools/user.tools';
 import { ExerciseType } from 'src/agent/interface/agent.interface';
 import { responseFormatMap } from 'src/agent/schema/quick-exercise.schema';
 import { QEPrompt } from 'src/agent/schema/teaching-agent.schema';
+import {
+  subtopicGeneratorResponseFormat,
+  subtopicPrompt,
+} from 'src/agent/schema/subtopic.schema';
+import { AcademicsService } from 'src/academics/academics.service';
+import { createCourseTools } from 'src/agent/tools/course.tools';
 
 @Injectable()
 export class AgentFactory {
@@ -29,17 +33,28 @@ export class AgentFactory {
     });
   }
 
-  createAgentDeps(curriculum: CurriculumService) {
+  createAgentDeps(academicsSvc: AcademicsService) {
     const userTools = createUserTools();
-    const curriculumTools = createCurriculumTools(curriculum);
+    const courseTools = createCourseTools({ academicSvc: academicsSvc });
+    // const curriculumTools = createCurriculumTools(curriculum);
 
     return {
       model: this.model,
       tools: {
         user: userTools,
-        curriculum: curriculumTools,
+        course: courseTools,
       },
     };
+  }
+
+  createSubTopicGeneratorAgent(checkpointer: MemorySaver) {
+    return createAgent({
+      model: this.model,
+      systemPrompt: subtopicPrompt,
+      responseFormat: subtopicGeneratorResponseFormat,
+      checkpointer,
+      tools: [],
+    });
   }
 
   createExerciseGeneratorAgent(

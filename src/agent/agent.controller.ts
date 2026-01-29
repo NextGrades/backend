@@ -2,14 +2,18 @@ import {
   Body,
   Controller,
   Get,
+  HttpStatus,
   NotFoundException,
   Param,
   Post,
 } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { TeachAgentDto } from 'src/agent/dto/teach-agent.dto';
-import { ok } from 'src/common/http/response.helpers';
-import { QuickExerciseDto } from 'src/agent/dto/generate-agent.dto';
+import { fail, ok } from 'src/common/http/response.helpers';
+import {
+  QuickExerciseDto,
+  SubtopicsDto,
+} from 'src/agent/dto/generate-agent.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 
@@ -26,8 +30,8 @@ export class AgentController {
     body: TeachAgentDto,
   ) {
     const content = await this.agentService.teachTopic(
-      body.prompt,
       body.userId,
+      body.topicId,
     );
     return ok(content);
   }
@@ -37,7 +41,13 @@ export class AgentController {
     @Body()
     body: TeachAgentDto,
   ) {
-    return this.agentService.generateExercises(body.prompt, body.userId);
+    const exercises =
+      await this.agentService.generateExercisesFromTaughtContent(
+        body.userId,
+        body.topicId,
+      );
+
+    return ok(exercises);
   }
 
   @Post('exercise/quick')
@@ -74,9 +84,29 @@ export class AgentController {
     }
 
     if (state === 'failed') {
-      return fail(job.failedReason || 'Job failed');
+      return fail(
+        job.failedReason || 'Job failed',
+        `${HttpStatus.FAILED_DEPENDENCY}`,
+      );
     }
 
     return { status: state };
+  }
+
+  @Post('courses/subtopics')
+  async subTopics(
+    @Body()
+    body: SubtopicsDto,
+  ) {
+    const data = await this.agentService.generateSubTopics(body.courseCode, {
+      configurable: {
+        thread_id: body.threadId || 'subtopic-generation-thread',
+      },
+      context: { user_id: 'system', level: 0 },
+    });
+    return ok(
+      data,
+      `Subtopic generation for ${body.courseCode} completed successfully`,
+    );
   }
 }

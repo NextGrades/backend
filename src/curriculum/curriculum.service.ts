@@ -44,8 +44,6 @@ export class CurriculumService {
   async getCurriculum(query: CurriculumQuery): Promise<AgentTopicObjective[]> {
     const { topic, classLevel } = query;
 
-    console.log('CurriculumService.getCurriculum - query:', query);
-
     const data = await this.topicRepo
       .createQueryBuilder('t')
       .leftJoinAndSelect('t.subTheme', 'st')
@@ -55,8 +53,6 @@ export class CurriculumService {
       .where('t.name ILIKE :topic', { topic: `%${topic}%` })
       .andWhere('cl.sort_order = :classLevel', { classLevel })
       .getMany();
-
-    // console.log('CurriculumService.getCurriculum - data:', data);
 
     const learningObjectives = data.map((topic) => ({
       id: topic.id,
@@ -71,10 +67,6 @@ export class CurriculumService {
       evaluationGuide: topic.evaluationGuide,
     }));
 
-    console.log(
-      'CurriculumService.getCurriculum - learningObjectives:',
-      learningObjectives,
-    );
     return learningObjectives;
   }
 

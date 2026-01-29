@@ -9,15 +9,25 @@ import { AudioModule } from './audio/audio.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { AgentModule } from './agent/agent.module';
 import { AllExceptionsFilter } from 'all-exceptions.filter';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { UsersModule } from './users/users.module';
 import { DatabaseModule } from './database/database.module';
 import { RedisCacheModule } from 'src/cache/redis-cache.module';
 import { BullModule } from '@nestjs/bullmq';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AcademicsModule } from './academics/academics.module';
 
 @Module({
   imports: [
     AuthModule,
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000,
+          limit: 10,
+        },
+      ],
+    }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -81,6 +91,8 @@ import { BullModule } from '@nestjs/bullmq';
     UsersModule,
 
     DatabaseModule,
+
+    AcademicsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -88,6 +100,10 @@ import { BullModule } from '@nestjs/bullmq';
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })

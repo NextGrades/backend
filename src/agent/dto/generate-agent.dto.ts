@@ -34,3 +34,12 @@ export class QuickExerciseDto {
   @IsOptional()
   threadId?: string;
 }
+
+export class SubtopicsDto {
+  @IsString()
+  courseCode: string;
+
+  @IsString()
+  @IsOptional()
+  threadId?: string;
+}

@@ -5,17 +5,8 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { createAgent } from 'langchain';
 import { MemorySaver } from '@langchain/langgraph';
 import { v7 as uuidv7 } from 'uuid';
-import {
-  teachingResponseFormat,
-  exerciseResponseFormat,
-  // QuickExerciseResponse,
-  CurriculumPrompt,
-} from 'src/agent/schema/teaching-agent.schema';
-import {
-  ExerciseResponse,
-  ExerciseType,
-  TeachingResponse,
-} from 'src/agent/interface/agent.interface';
+
+import { ExerciseType } from 'src/agent/interface/agent.interface';
 import { CurriculumService } from 'src/curriculum/curriculum.service';
 
 // import { responseFormatMap } from 'src/agent/schema/quick-exercise.schema';
@@ -23,6 +14,18 @@ import { AgentFactory } from 'src/agent/agent.factory';
 import { HttpLogger } from 'src/logger/http-logger.service';
 import { Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
+import { AcademicsService } from 'src/academics/academics.service';
+import {
+  SubtopicGeneratorInput,
+  SubtopicGeneratorResponse,
+} from 'src/agent/schema/subtopic.schema';
+import {
+  courseExerciseResponse,
+  courseExerciseResponseFormat,
+  coursePrompt,
+  CourseTeachingResponse,
+  courseTeachingResponseFormat,
+} from 'src/agent/schema/course-teacher.schema';
 
 @Injectable()
 export class AgentService {
@@ -32,37 +35,40 @@ export class AgentService {
 
   constructor(
     private readonly curriculum: CurriculumService,
+    private readonly academicsSvc: AcademicsService,
     @InjectQueue('exercise')
     private readonly exQueue: Queue,
     private agentFactory: AgentFactory,
     private readonly logger: HttpLogger,
   ) {
-    const systemPrompt = CurriculumPrompt;
-    const { model, tools } = this.agentFactory.createAgentDeps(this.curriculum);
+    // const systemPrompt = CurriculumPrompt;
+    const { model, tools } = this.agentFactory.createAgentDeps(
+      this.academicsSvc,
+    );
 
     /* ---------------- AGENTS ---------------- */
     this.teachingAgent = createAgent({
       model,
-      systemPrompt,
-      responseFormat: teachingResponseFormat,
+      systemPrompt: coursePrompt,
+      responseFormat: courseTeachingResponseFormat,
       checkpointer: this.checkpointer,
-      tools: [tools.user.getUserAge, tools.curriculum.getNerdcCurriculum],
+      tools: [tools.user.getUserAge, tools.course.getSubtopicData],
     });
 
     this.exerciseAgent = createAgent({
       model,
-      systemPrompt,
-      responseFormat: exerciseResponseFormat,
+      systemPrompt: coursePrompt,
+      responseFormat: courseExerciseResponseFormat,
       checkpointer: this.checkpointer,
-      tools: [tools.user.getUserAge, tools.curriculum.getNerdcCurriculum],
+      tools: [tools.user.getUserAge, tools.course.getSubtopicData],
     });
   }
 
   async teachTopic(
-    prompt: string,
     userId: string,
+    topicId: string,
     threadId = 'edu-thread-1',
-  ): Promise<TeachingResponse> {
+  ): Promise<CourseTeachingResponse> {
     this.logger.log(
       `Teaching agent invoked for userId: ${userId}, threadId: ${threadId}`,
       'AgentService.teachTopic',
@@ -70,7 +76,12 @@ export class AgentService {
     try {
       const response = await this.teachingAgent.invoke(
         {
-          messages: [{ role: 'user' as const, content: prompt }],
+          messages: [
+            {
+              role: 'user' as const,
+              content: `Teach me this course subtopic. The subtopic ID is ${topicId}.`,
+            },
+          ],
         },
         {
           configurable: { thread_id: threadId },
@@ -78,17 +89,20 @@ export class AgentService {
         },
       );
 
+      console.log(response);
+
       // Type assertion with validation
       const structuredResponse = response.structuredResponse as unknown;
 
       // Validate the response matches our expected type
-      const validated = teachingResponseFormat.safeParse(structuredResponse);
+      const validated =
+        courseTeachingResponseFormat.safeParse(structuredResponse);
 
       if (!validated.success) {
         throw new Error('Invalid teaching response format');
       }
       this.logger.log(
-        `Teaching response validated successfully for userId: ${userId}`,
+        `Teaching response validated successfully for userId: ${userId} and topicId: ${topicId}`,
         'AgentService.teachTopic',
       );
       return validated.data;
@@ -96,7 +110,7 @@ export class AgentService {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       this.logger.error(
-        `Failed to generate teaching content for userId: ${userId}`,
+        `Failed to generate teaching content for userId: ${userId} on topicId:${topicId} `,
         errorMessage,
         'AgentService.teachTopic',
       );
@@ -106,19 +120,23 @@ export class AgentService {
     }
   }
 
-  async generateExercises(
-    prompt: string,
+  async generateExercisesFromTaughtContent(
     userId: string,
     threadId = 'edu-thread-1',
-  ): Promise<ExerciseResponse> {
+  ): Promise<courseExerciseResponse> {
     this.logger.log(
-      `Exercise agent invoked for userId: ${userId}, threadId: ${threadId}`,
+      `Exercise agent invoked for the chat threadId: ${threadId} for user ${userId}`,
       AgentService.name,
     );
     try {
       const response = await this.exerciseAgent.invoke(
         {
-          messages: [{ role: 'user' as const, content: prompt }],
+          messages: [
+            {
+              role: 'user' as const,
+              content: 'Give me 3 exercises on this topic',
+            },
+          ],
         },
         {
           configurable: { thread_id: threadId },
@@ -130,7 +148,8 @@ export class AgentService {
       const structuredResponse = response.structuredResponse as unknown;
 
       // Validate the response matches our expected type
-      const validated = exerciseResponseFormat.safeParse(structuredResponse);
+      const validated =
+        courseExerciseResponseFormat.safeParse(structuredResponse);
 
       if (!validated.success) {
         throw new Error('Invalid exercise response format');
@@ -153,73 +172,6 @@ export class AgentService {
       );
     }
   }
-
-  //   async generateQuickExercise(
-  //     exerciseType: ExerciseType,
-  //     count: number,
-  //     config: {
-  //       configurable: { thread_id: string };
-  //       context: { user_id: string; class_level: number };
-  //     },
-  //   ): Promise<QuickExerciseResponse> {
-  //     const userPrompt = `
-  // Generate a quick exercise set.
-
-  // Requirements:
-  // - Exercise type: ${exerciseType}
-  // - Number of exercises: ${count}
-  // - General academic skills only
-  // - No teaching or explanations
-  // - Keep it short and simple
-
-  // Proceed.
-  // `;
-
-  //     const messages = [{ role: 'user' as const, content: userPrompt }];
-
-  //     this.logger.log(
-  //       `Quick exercise generator invoked for exerciseType: ${exerciseType}, count: ${count}, userId: ${config.context.user_id}`,
-  //       AgentService.name,
-  //     );
-
-  //     try {
-  //       const agent = this.agentFactory.createExerciseGeneratorAgent(
-  //         exerciseType,
-  //         this.checkpointer,
-  //       );
-  //       const response = await agent.invoke({ messages }, config);
-
-  //       const responseFormat = responseFormatMap[exerciseType];
-
-  //       if (!responseFormat) {
-  //         throw new Error(`Invalid exercise type: ${exerciseType}`);
-  //       }
-
-  //       const validated = responseFormat.safeParse(response.structuredResponse);
-
-  //       if (!validated.success) {
-  //         throw new Error(`Invalid response format: ${validated.error.message}`);
-  //       }
-
-  //       this.logger.log(
-  //         `Quick exercise response validated for exerciseType: ${exerciseType}, userId: ${config.context.user_id}`,
-  //         AgentService.name,
-  //       );
-
-  //       return validated.data as QuickExerciseResponse;
-  //     } catch (error) {
-  //       const errorMessage =
-  //         error instanceof Error ? error.message : 'Unknown error occurred';
-  //       this.logger.error(
-  //         `Failed to generate ${exerciseType} exercises for userId: ${config.context.user_id}`,
-  //         errorMessage,
-  //         AgentService.name,
-  //       );
-  //       throw new InternalServerErrorException(
-  //         `Failed to generate ${exerciseType} exercises: ${errorMessage}`,
-  //       );
-  //     }
-  //   }
 
   async generateQuickExercise(
     exerciseType: ExerciseType,
@@ -253,5 +205,40 @@ export class AgentService {
     );
 
     return jobId;
+  }
+
+  async generateSubTopics(
+    courseCode: string,
+    config?: {
+      configurable: { thread_id: string };
+      context: { user_id: string; level: number };
+    },
+  ): Promise<SubtopicGeneratorResponse> {
+    const subTopicAgent = this.agentFactory.createSubTopicGeneratorAgent(
+      this.checkpointer,
+    );
+    const course = await this.academicsSvc.getCourseByCode(courseCode);
+    const rawInput: SubtopicGeneratorInput = {
+      course_code: course.code,
+      course_id: course.id,
+      course_title: course.title,
+      level: course.level,
+      credit_units: course.creditUnits,
+      syllabus_item: course.syllabusStructured[0],
+    };
+    const response = await subTopicAgent.invoke(
+      {
+        messages: [
+          {
+            role: 'user',
+            content: JSON.stringify(rawInput),
+          },
+        ],
+      },
+      config,
+    );
+
+    console.log(JSON.stringify(response.structuredResponse, null, 2));
+    return response.structuredResponse as SubtopicGeneratorResponse;
   }
 }
