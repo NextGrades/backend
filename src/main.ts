@@ -1,25 +1,24 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-// import { AllExceptionsFilter } from 'all-exceptions.filter';
 import { Response } from 'express';
 import { LoggerService, ValidationPipe, VersioningType } from '@nestjs/common';
 import 'reflect-metadata';
-import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston/dist/winston.constants';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
-    logger: ['error', 'warn', 'log'], // no 'log'
-  });
-  // Enable CORS for your frontend
-  app.enableCors({
-    origin: ['http://localhost:5173', 'https://nextgrades.netlify.app'],
-    credentials: true, // Allow cookies to be sent
+    logger: ['error', 'warn', 'log'],
   });
 
-  // Use cookie-parser middleware
-  // app.use(cookieParser());
-  // Global ValidationPipe for DTO validation
+  // CORS
+  app.enableCors({
+    origin: ['http://localhost:5173', 'https://nextgrades.netlify.app'],
+    credentials: true,
+  });
+
+  // Global validation
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -28,6 +27,7 @@ async function bootstrap() {
     }),
   );
 
+  // Health check
   app.getHttpAdapter().get('/health', (req, res: Response) => {
     res.status(200).json({
       status: 'ok',
@@ -37,21 +37,44 @@ async function bootstrap() {
     });
   });
 
+  // API versioning
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: '1',
   });
 
-  // Redirect requests from root to /api/v1
+  // Global API prefix
+  app.setGlobalPrefix('api');
+
+  // Root redirect → Swagger docs
   app.getHttpAdapter().get('/', (req, res: Response) => {
-    res.redirect('/api');
+    res.redirect('/docs');
   });
 
-  app.setGlobalPrefix('api');
+  // Swagger config
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Ngrades API')
+    .setDescription(
+      'This documentation covers the Ngrades API endpoints and serves as a demo for recruiters.',
+    )
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+
+  // Swagger UI → /docs
+  SwaggerModule.setup('docs', app, document);
+
+  // Winston logger
   const logger = app.get<LoggerService>(WINSTON_MODULE_NEST_PROVIDER);
   app.useLogger(logger);
-  await app.listen(process.env.PORT ?? 7500);
-  logger.log(`Application is running on: ${await app.getUrl()}`);
+
+  const port = process.env.PORT ?? 7500;
+  await app.listen(port);
+
+  logger.log(`App running at: ${await app.getUrl()}`);
+  logger.log(` Swagger docs at: ${await app.getUrl()}/docs`);
 }
 
 bootstrap().catch((err) => {

@@ -16,10 +16,13 @@ import { RedisCacheModule } from 'src/cache/redis-cache.module';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AcademicsModule } from './academics/academics.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { SseModule } from './sse/sse.module';
 
 @Module({
   imports: [
     AuthModule,
+    EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -93,6 +96,8 @@ import { AcademicsModule } from './academics/academics.module';
     DatabaseModule,
 
     AcademicsModule,
+
+    SseModule,
   ],
   controllers: [AppController],
   providers: [

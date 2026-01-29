@@ -29,11 +29,32 @@ export class AgentController {
     @Body()
     body: TeachAgentDto,
   ) {
-    const content = await this.agentService.teachTopic(
-      body.userId,
-      body.topicId,
-    );
-    return ok(content);
+    const jobId = await this.agentService.teachTopic(body.userId, body.topicId);
+    return ok({ jobId }, 'Teaching job enqueued: poll the jobId for status');
+  }
+
+  @Get('teach/:jobId')
+  async getTeachingStatus(@Param('jobId') jobId: string) {
+    const job = await this.exerciseQueue.getJob(jobId);
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    const state = await job.getState();
+
+    if (state === 'completed') {
+      return ok(job.returnvalue, 'Job completed successfully');
+    }
+
+    if (state === 'failed') {
+      return fail(
+        job.failedReason || 'Job failed',
+        `${HttpStatus.FAILED_DEPENDENCY}`,
+      );
+    }
+
+    return { status: state };
   }
 
   @Post('exercise')

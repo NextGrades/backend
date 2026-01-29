@@ -23,7 +23,6 @@ import {
   courseExerciseResponse,
   courseExerciseResponseFormat,
   coursePrompt,
-  CourseTeachingResponse,
   courseTeachingResponseFormat,
 } from 'src/agent/schema/course-teacher.schema';
 
@@ -64,60 +63,31 @@ export class AgentService {
     });
   }
 
-  async teachTopic(
-    userId: string,
-    topicId: string,
-    threadId = 'edu-thread-1',
-  ): Promise<CourseTeachingResponse> {
+  async teachTopic(userId: string, topicId: string, threadId = 'edu-thread-1') {
+    const jobId = uuidv7();
     this.logger.log(
-      `Teaching agent invoked for userId: ${userId}, threadId: ${threadId}`,
+      `Queueing Teaching job of jobId=${jobId} userId: ${userId}, threadId: ${threadId}`,
       'AgentService.teachTopic',
     );
-    try {
-      const response = await this.teachingAgent.invoke(
-        {
-          messages: [
-            {
-              role: 'user' as const,
-              content: `Teach me this course subtopic. The subtopic ID is ${topicId}.`,
-            },
-          ],
+
+    await this.exQueue.add(
+      'generate-course-teaching-content',
+      {
+        userId,
+        topicId,
+        threadId,
+      },
+      {
+        jobId,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 3000,
         },
-        {
-          configurable: { thread_id: threadId },
-          context: { user_id: userId },
-        },
-      );
+      },
+    );
 
-      console.log(response);
-
-      // Type assertion with validation
-      const structuredResponse = response.structuredResponse as unknown;
-
-      // Validate the response matches our expected type
-      const validated =
-        courseTeachingResponseFormat.safeParse(structuredResponse);
-
-      if (!validated.success) {
-        throw new Error('Invalid teaching response format');
-      }
-      this.logger.log(
-        `Teaching response validated successfully for userId: ${userId} and topicId: ${topicId}`,
-        'AgentService.teachTopic',
-      );
-      return validated.data;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error occurred';
-      this.logger.error(
-        `Failed to generate teaching content for userId: ${userId} on topicId:${topicId} `,
-        errorMessage,
-        'AgentService.teachTopic',
-      );
-      throw new InternalServerErrorException(
-        `Failed to generate teaching content: ${errorMessage}`,
-      );
-    }
+    return jobId;
   }
 
   async generateExercisesFromTaughtContent(

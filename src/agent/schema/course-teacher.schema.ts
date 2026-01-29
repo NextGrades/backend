@@ -97,7 +97,7 @@ export type CourseTeachingResponse = z.infer<
 >;
 
 export const courseExerciseResponseFormat = z.object({
-  course_code: z.string(),
+  courseCode: z.string(),
   level: z.number(),
 
   instructions: z.string(),
@@ -112,8 +112,8 @@ export const courseExerciseResponseFormat = z.object({
         'short_answer',
         'true_false',
       ]),
-      correct_answer: z.string(),
-      related_syllabus_item: z.string(),
+      correctAnswer: z.string(),
+      relatedSyllabusItem: z.string(),
     }),
   ),
 });

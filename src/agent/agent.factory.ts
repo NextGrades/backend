@@ -14,6 +14,10 @@ import {
 } from 'src/agent/schema/subtopic.schema';
 import { AcademicsService } from 'src/academics/academics.service';
 import { createCourseTools } from 'src/agent/tools/course.tools';
+import {
+  coursePrompt,
+  courseTeachingResponseFormat,
+} from 'src/agent/schema/course-teacher.schema';
 
 @Injectable()
 export class AgentFactory {
@@ -45,6 +49,22 @@ export class AgentFactory {
         course: courseTools,
       },
     };
+  }
+
+  createCourseTeachingAgent(
+    checkpointer: MemorySaver,
+    academicsSvc: AcademicsService,
+  ) {
+    const userTools = createUserTools();
+    const courseTools = createCourseTools({ academicSvc: academicsSvc });
+
+    return createAgent({
+      model: this.model,
+      systemPrompt: coursePrompt,
+      responseFormat: courseTeachingResponseFormat,
+      checkpointer,
+      tools: [userTools.getUserInfo, courseTools.getSubtopicData],
+    });
   }
 
   createSubTopicGeneratorAgent(checkpointer: MemorySaver) {
