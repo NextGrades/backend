@@ -1,6 +1,5 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { InternalServerErrorException } from '@nestjs/common';
 import { AgentFactory } from 'src/agent/agent.factory';
 import { responseFormatMap } from 'src/agent/schema/quick-exercise.schema';
 
@@ -10,7 +9,13 @@ import { AgentConfig, ExerciseType } from 'src/agent/interface/agent.interface';
 import { SystemLogger } from 'src/logger/system-logger.service';
 import { AcademicsService } from 'src/academics/academics.service';
 import { courseTeachingResponseFormat } from 'src/agent/schema/course-teacher.schema';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { validateJob } from 'src/common/schema/job.schema';
+import { withTimeout } from 'src/common/errors/withTimeout';
+import { classifyError } from 'src/common/errors/classify';
+import { PermanentError, QueueError } from 'src/common/errors/error';
+
+const BASE_DELAY = 75_000; // 75 seconds
+const MAX_UNKNOWN_RETRIES = 5;
 
 @Processor('exercise')
 export class ExerciseProcessor extends WorkerHost {
@@ -20,7 +25,6 @@ export class ExerciseProcessor extends WorkerHost {
     private readonly agentFactory: AgentFactory,
     private readonly logger: SystemLogger,
     private readonly academicsSvc: AcademicsService,
-    private readonly eventEmitter: EventEmitter2,
   ) {
     super();
   }
@@ -38,7 +42,11 @@ export class ExerciseProcessor extends WorkerHost {
 
       default:
         this.logger.warn(
-          `Unhandled job name: ${job.name}`,
+          {
+            event: 'unhandled_job_name',
+            jobName: job.name,
+            jobId: job.id,
+          },
           ExerciseProcessor.name,
         );
         return;
@@ -49,9 +57,8 @@ export class ExerciseProcessor extends WorkerHost {
   // Quick Exercise Job
   // ======================================================
 
-  private async handleGenerateQuickExercise(
-    job: Job,
-  ): Promise<QuickExerciseResponse> {
+  private async handleGenerateQuickExercise(job: Job): Promise<unknown> {
+    const start = Date.now();
     const { exerciseType, count, config } = job.data as {
       exerciseType: ExerciseType;
       count: number;
@@ -81,10 +88,12 @@ export class ExerciseProcessor extends WorkerHost {
         response.structuredResponse,
       );
     } catch (error) {
-      this.handleError(
+      const duration = Date.now() - start;
+      await this.handleJobError(
+        job,
         error,
-        `quick-exercise:${exerciseType}`,
-        config.context.user_id,
+        { userId: config.context.user_id },
+        duration,
       );
     }
   }
@@ -96,31 +105,38 @@ export class ExerciseProcessor extends WorkerHost {
   private async handleGenerateCourseTeachingContent(
     job: Job,
   ): Promise<unknown> {
-    const { topicId, userId, threadId } = job.data as {
-      topicId: string;
-      userId: string;
-      threadId: string;
-    };
-
+    const start = Date.now();
+    let userId: string | undefined = undefined;
+    let topicId: string | undefined = undefined;
     try {
+      const jobData = validateJob(job);
+      topicId = jobData.topicId;
+      userId = jobData.userId;
+      const threadId = jobData.threadId;
+
       const agent = this.agentFactory.createCourseTeachingAgent(
         this.checkpointer,
         this.academicsSvc,
       );
 
-      const response = await agent.invoke(
-        {
-          messages: [
+      const response = await withTimeout(
+        (signal) =>
+          agent.invoke(
             {
-              role: 'user',
-              content: this.buildTeachingPrompt(topicId),
+              messages: [
+                {
+                  role: 'user',
+                  content: this.buildTeachingPrompt(topicId!),
+                },
+              ],
             },
-          ],
-        },
-        {
-          configurable: { thread_id: threadId },
-          context: { user_id: userId },
-        },
+            {
+              configurable: { thread_id: threadId },
+              context: { user_id: userId },
+              signal, // Pass the abort signal to the agent
+            },
+          ),
+        60_000,
       );
 
       const validated = courseTeachingResponseFormat.safeParse(
@@ -133,7 +149,17 @@ export class ExerciseProcessor extends WorkerHost {
 
       return validated.data;
     } catch (error) {
-      this.handleError(error, `course-teaching:${topicId}`, userId);
+      const duration = Date.now() - start;
+
+      await this.handleJobError(
+        job,
+        error,
+        {
+          userId,
+          topicId,
+        },
+        duration,
+      );
     }
   }
 
@@ -198,17 +224,42 @@ Requirements:
   // ======================================================
   // Error handling
   // ======================================================
+  private async handleJobError(
+    job: Job,
+    error: unknown,
+    meta?: Record<string, any>,
+    durationMs?: number,
+  ): Promise<void> {
+    // Permanent → fail immediately (no delay)
+    if (error instanceof PermanentError) {
+      throw new QueueError(error.message, {
+        code: error.code,
+        meta: error.meta,
+        failureType: 'PERMANENT',
+        durationMs,
+      });
+    }
 
-  private handleError(error: unknown, context: string, userId: string): never {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const type = classifyError(error, durationMs ?? 0);
 
-    this.logger.error(
-      `Job failed [${context}], userId=${userId}`,
-      message,
-      ExerciseProcessor.name,
-    );
+    // Transient → delay manually (no failure yet)
+    if (['RATE_LIMIT', 'TIMEOUT', 'NETWORK', 'SERVER'].includes(type)) {
+      await job.moveToDelayed(Date.now() + BASE_DELAY);
+      return;
+    }
 
-    throw new InternalServerErrorException(message);
+    if (job.attemptsMade >= MAX_UNKNOWN_RETRIES) {
+      throw new QueueError(
+        error instanceof Error ? error.message : 'Unknown error',
+        {
+          meta,
+          failureType: type,
+          durationMs,
+        },
+      );
+    }
+
+    throw error;
   }
 
   // ======================================================
@@ -218,7 +269,11 @@ Requirements:
   @OnWorkerEvent('active')
   onActive(job: Job) {
     this.logger.log(
-      `Job ${job.id} started (${job.name})`,
+      {
+        event: 'job_started',
+        jobId: job.id,
+        jobName: job.name,
+      },
       ExerciseProcessor.name,
     );
   }
@@ -227,16 +282,40 @@ Requirements:
   onCompleted(job: Job, result: unknown) {
     console.log(result);
     this.logger.log(
-      `Job ${job.id} completed (${job.name})`,
+      {
+        event: 'job_completed',
+        jobId: job.id,
+        jobName: job.name,
+      },
       ExerciseProcessor.name,
     );
   }
 
-  @OnWorkerEvent('failed')
   onFailed(job: Job, error: Error) {
+    let logMeta: Record<string, any> = {};
+    let logCode: string | undefined;
+    let failureType: string | undefined;
+
+    if (error instanceof PermanentError) {
+      logMeta = error.meta ?? {};
+      logCode = error.code;
+    } else if (error instanceof QueueError) {
+      logMeta = error.meta ?? {};
+      logCode = error.code;
+      failureType = error.failureType;
+    }
+
     this.logger.error(
-      `Job ${job.id} failed (${job.name})`,
-      error.message,
+      {
+        event: 'job_failed',
+        jobId: job.id,
+        jobName: job.name,
+        code: logCode,
+        failureType,
+        meta: logMeta,
+        errorMessage: error.message,
+        stack: error.stack,
+      },
       ExerciseProcessor.name,
     );
   }

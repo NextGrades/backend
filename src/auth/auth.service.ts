@@ -23,7 +23,17 @@ export class AuthService {
   /* -------------------- REGISTER -------------------- */
   async register(dto: RegisterDto): Promise<PublicUser> {
     const user = await this.userService.create(dto);
-    this.logger.log(`New user registered: ${user.email}`, this.context);
+    this.logger.log(
+      {
+        event: 'user_registered',
+        email: user.email,
+        fullName: `${user.firstName} ${user.lastName}`,
+        id: user.id,
+        createdAt: user.createdAt,
+      },
+      this.context,
+    );
+
     return user;
   }
 

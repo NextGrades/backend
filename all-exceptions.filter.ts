@@ -111,16 +111,16 @@ export class AllExceptionsFilter extends BaseExceptionFilter {
 
     /* ---------------- STRUCTURED LOGGING ---------------- */
     this.logger.error(
-      'Unhandled exception',
-      exception instanceof Error ? exception.stack : undefined,
-      AllExceptionsFilter.name,
       {
+        event: 'unhandled_exception',
         requestId: request.requestId,
         method: request.method,
         url: request.originalUrl,
         statusCode: myResponseObj.statusCode,
         response: myResponseObj.response,
+        stack: exception instanceof Error ? exception.stack : undefined,
       },
+      AllExceptionsFilter.name,
     );
 
     response.status(myResponseObj.statusCode).json(myResponseObj);

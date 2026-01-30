@@ -66,7 +66,12 @@ export class AgentService {
   async teachTopic(userId: string, topicId: string, threadId = 'edu-thread-1') {
     const jobId = uuidv7();
     this.logger.log(
-      `Queueing Teaching job of jobId=${jobId} userId: ${userId}, threadId: ${threadId}`,
+      {
+        event: 'queue_teaching_job',
+        jobId,
+        userId,
+        threadId,
+      },
       'AgentService.teachTopic',
     );
 
@@ -95,9 +100,14 @@ export class AgentService {
     threadId = 'edu-thread-1',
   ): Promise<courseExerciseResponse> {
     this.logger.log(
-      `Exercise agent invoked for the chat threadId: ${threadId} for user ${userId}`,
+      {
+        event: 'exercise_agent_invoked',
+        threadId,
+        userId,
+      },
       AgentService.name,
     );
+
     try {
       const response = await this.exerciseAgent.invoke(
         {
@@ -124,19 +134,28 @@ export class AgentService {
       if (!validated.success) {
         throw new Error('Invalid exercise response format');
       }
-      this.logger.log(
-        `Exercise response validated successfully for userId: ${userId}`,
+      this.logger.error(
+        {
+          event: 'exercise_response_validation_success',
+          userId,
+          threadId,
+        },
         AgentService.name,
       );
+
       return validated.data;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       this.logger.error(
-        `Failed to generate exercises for userId: ${userId}`,
-        errorMessage,
+        {
+          event: 'generate_exercises_failed',
+          userId,
+          errorMessage,
+        },
         AgentService.name,
       );
+
       throw new InternalServerErrorException(
         `Failed to generate exercises: ${errorMessage}`,
       );
@@ -153,7 +172,12 @@ export class AgentService {
   ) {
     const jobId = uuidv7();
     this.logger.log(
-      `Queueing quick exercise jobId=${jobId} exerciseType=${exerciseType} userId=${config.context.user_id}`,
+      {
+        event: 'queue_quick_exercise_job',
+        jobId,
+        exerciseType,
+        userId: config.context.user_id,
+      },
       AgentService.name,
     );
 
@@ -208,7 +232,7 @@ export class AgentService {
       config,
     );
 
-    console.log(JSON.stringify(response.structuredResponse, null, 2));
+    // console.log(JSON.stringify(response.structuredResponse, null, 2));
     return response.structuredResponse as SubtopicGeneratorResponse;
   }
 }

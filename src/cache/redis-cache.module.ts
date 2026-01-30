@@ -36,14 +36,28 @@ export class RedisCacheModule implements OnModuleInit {
       const result = await this.cacheManager.get<string>('health-check');
 
       if (result === 'ok') {
-        this.logger.log('Redis cache connection established successfully');
+        this.logger.log({
+          event: 'redis_health_check',
+          status: 'connected',
+          message: 'Redis cache connection established successfully',
+        });
       } else {
-        this.logger.warn(
-          'Redis cache connected but health check returned unexpected value',
-        );
+        this.logger.warn({
+          event: 'redis_health_check',
+          status: 'unexpected_value',
+          message:
+            'Redis cache connected but health check returned unexpected value',
+          result,
+        });
       }
     } catch (error) {
-      this.logger.error(`Redis cache connection failed: ${error}`);
+      this.logger.error({
+        event: 'redis_health_check',
+        status: 'failed',
+        message: 'Redis cache connection failed',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     }
   }
 }

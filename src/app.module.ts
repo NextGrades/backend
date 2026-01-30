@@ -38,7 +38,6 @@ import { SseModule } from './sse/sse.module';
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
           password: configService.get<string>('REDIS_PASSWORD', ''),
-          // Optional: Add more Redis options
           maxRetriesPerRequest: null, // Required for BullMQ
           enableReadyCheck: false,
         },
