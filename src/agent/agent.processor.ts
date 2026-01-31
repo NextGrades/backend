@@ -1,5 +1,5 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { AgentFactory } from 'src/agent/agent.factory';
 import { responseFormatMap } from 'src/agent/schema/quick-exercise.schema';
 
@@ -9,18 +9,20 @@ import { AgentConfig, ExerciseType } from 'src/agent/interface/agent.interface';
 import { SystemLogger } from 'src/logger/system-logger.service';
 import { AcademicsService } from 'src/academics/academics.service';
 import { courseTeachingResponseFormat } from 'src/agent/schema/course-teacher.schema';
-import { validateJob } from 'src/common/schema/job.schema';
+import {
+  BaseJobData,
+  JobFailureEnvelope,
+  validateJob,
+} from 'src/common/schema/job.schema';
 import { withTimeout } from 'src/common/errors/withTimeout';
 import { classifyError } from 'src/common/errors/classify';
-import { PermanentError, QueueError } from 'src/common/errors/error';
+import { PermanentError } from 'src/common/errors/error';
 
 const BASE_DELAY = 75_000; // 75 seconds
 const MAX_UNKNOWN_RETRIES = 5;
 
 @Processor('exercise')
 export class ExerciseProcessor extends WorkerHost {
-  private readonly checkpointer = new MemorySaver();
-
   constructor(
     private readonly agentFactory: AgentFactory,
     private readonly logger: SystemLogger,
@@ -53,6 +55,9 @@ export class ExerciseProcessor extends WorkerHost {
     }
   }
 
+  private createMemory(): MemorySaver {
+    return new MemorySaver();
+  }
   // ======================================================
   // Quick Exercise Job
   // ======================================================
@@ -65,11 +70,13 @@ export class ExerciseProcessor extends WorkerHost {
       config: AgentConfig;
     };
 
+    const memory = this.createMemory();
+
     try {
-      const agent = this.agentFactory.createExerciseGeneratorAgent(
+      const agent = this.agentFactory.createExerciseGeneratorAgent({
         exerciseType,
-        this.checkpointer,
-      );
+        memory,
+      });
 
       const response = await agent.invoke(
         {
@@ -108,16 +115,19 @@ export class ExerciseProcessor extends WorkerHost {
     const start = Date.now();
     let userId: string | undefined = undefined;
     let topicId: string | undefined = undefined;
+    let conversationId: string | undefined = undefined;
     try {
       const jobData = validateJob(job);
       topicId = jobData.topicId;
-      userId = jobData.userId;
-      const threadId = jobData.threadId;
+      userId = jobData.scope.userId;
+      conversationId = jobData.scope.conversationId;
 
-      const agent = this.agentFactory.createCourseTeachingAgent(
-        this.checkpointer,
-        this.academicsSvc,
-      );
+      const memory = this.createMemory();
+
+      const agent = this.agentFactory.createCourseTeachingAgent({
+        memory,
+        academicsSvc: this.academicsSvc,
+      });
 
       const response = await withTimeout(
         (signal) =>
@@ -131,9 +141,9 @@ export class ExerciseProcessor extends WorkerHost {
               ],
             },
             {
-              configurable: { thread_id: threadId },
+              configurable: { thread_id: conversationId },
               context: { user_id: userId },
-              signal, // Pass the abort signal to the agent
+              signal,
             },
           ),
         60_000,
@@ -157,6 +167,7 @@ export class ExerciseProcessor extends WorkerHost {
         {
           userId,
           topicId,
+          conversationId,
         },
         duration,
       );
@@ -232,12 +243,21 @@ Requirements:
   ): Promise<void> {
     // Permanent → fail immediately (no delay)
     if (error instanceof PermanentError) {
-      throw new QueueError(error.message, {
+      const failure: JobFailureEnvelope = {
+        failureType: 'PERMANENT',
         code: error.code,
         meta: error.meta,
-        failureType: 'PERMANENT',
         durationMs,
+      };
+
+      // Persist failure metadata on the job
+      await job.updateData({
+        ...job.data,
+        __failure: failure,
       });
+
+      // Control signal only
+      throw new UnrecoverableError(error.message);
     }
 
     const type = classifyError(error, durationMs ?? 0);
@@ -249,13 +269,18 @@ Requirements:
     }
 
     if (job.attemptsMade >= MAX_UNKNOWN_RETRIES) {
-      throw new QueueError(
+      const failure: JobFailureEnvelope = {
+        failureType: 'UNKNOWN',
+        durationMs,
+      };
+
+      await job.updateData({
+        ...job.data,
+        __failure: failure,
+      });
+
+      throw new UnrecoverableError(
         error instanceof Error ? error.message : 'Unknown error',
-        {
-          meta,
-          failureType: type,
-          durationMs,
-        },
       );
     }
 
@@ -291,30 +316,20 @@ Requirements:
     );
   }
 
-  onFailed(job: Job, error: Error) {
-    let logMeta: Record<string, any> = {};
-    let logCode: string | undefined;
-    let failureType: string | undefined;
-
-    if (error instanceof PermanentError) {
-      logMeta = error.meta ?? {};
-      logCode = error.code;
-    } else if (error instanceof QueueError) {
-      logMeta = error.meta ?? {};
-      logCode = error.code;
-      failureType = error.failureType;
-    }
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<BaseJobData>, err: Error) {
+    const failure = job.data?.__failure;
 
     this.logger.error(
       {
-        event: 'job_failed',
         jobId: job.id,
-        jobName: job.name,
-        code: logCode,
-        failureType,
-        meta: logMeta,
-        errorMessage: error.message,
-        stack: error.stack,
+        name: job.name,
+        attemptsMade: job.attemptsMade,
+        reason: err.message,
+        failureType: failure?.failureType,
+        code: failure?.code,
+        meta: failure?.meta,
+        durationMs: failure?.durationMs,
       },
       ExerciseProcessor.name,
     );

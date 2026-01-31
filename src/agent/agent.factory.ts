@@ -21,14 +21,11 @@ import {
 
 @Injectable()
 export class AgentFactory {
-  private model: ChatGoogleGenerativeAI;
+  private readonly model: ChatGoogleGenerativeAI;
 
-  constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get<string>('GOOGLE_API_KEY');
-
-    if (!apiKey) {
-      throw new Error('GOOGLE_API_KEY environment variable is not set');
-    }
+  constructor(configService: ConfigService) {
+    const apiKey = configService.get<string>('GOOGLE_API_KEY');
+    if (!apiKey) throw new Error('GOOGLE_API_KEY not set');
 
     this.model = new ChatGoogleGenerativeAI({
       model: 'gemini-2.5-flash',
@@ -37,66 +34,60 @@ export class AgentFactory {
     });
   }
 
-  createAgentDeps(academicsSvc: AcademicsService) {
-    const userTools = createUserTools();
-    const courseTools = createCourseTools({ academicSvc: academicsSvc });
-    // const curriculumTools = createCurriculumTools(curriculum);
+  /* ---------------- Shared tools ---------------- */
 
-    return {
-      model: this.model,
-      tools: {
-        user: userTools,
-        course: courseTools,
-      },
-    };
+  private createUserTools() {
+    return createUserTools();
   }
 
-  createCourseTeachingAgent(
-    checkpointer: MemorySaver,
-    academicsSvc: AcademicsService,
-  ) {
-    const userTools = createUserTools();
-    const courseTools = createCourseTools({ academicSvc: academicsSvc });
+  private createCourseTools(academicsSvc: AcademicsService) {
+    return createCourseTools({ academicSvc: academicsSvc });
+  }
+
+  /* ---------------- Agents ---------------- */
+
+  createCourseTeachingAgent(deps: {
+    memory: MemorySaver;
+    academicsSvc: AcademicsService;
+  }) {
+    const userTools = this.createUserTools();
+    const courseTools = this.createCourseTools(deps.academicsSvc);
 
     return createAgent({
       model: this.model,
       systemPrompt: coursePrompt,
       responseFormat: courseTeachingResponseFormat,
-      checkpointer,
+      checkpointer: deps.memory,
       tools: [userTools.getUserInfo, courseTools.getSubtopicData],
     });
   }
 
-  createSubTopicGeneratorAgent(checkpointer: MemorySaver) {
+  createSubTopicGeneratorAgent(deps: { memory: MemorySaver }) {
     return createAgent({
       model: this.model,
       systemPrompt: subtopicPrompt,
       responseFormat: subtopicGeneratorResponseFormat,
-      checkpointer,
+      checkpointer: deps.memory,
       tools: [],
     });
   }
 
-  createExerciseGeneratorAgent(
-    exerciseType: ExerciseType,
-    checkpointer: MemorySaver,
-  ) {
-    const userTools = createUserTools();
-    const responseFormat = responseFormatMap[exerciseType];
+  createExerciseGeneratorAgent(deps: {
+    exerciseType: ExerciseType;
+    memory: MemorySaver;
+  }) {
+    const userTools = this.createUserTools();
+    const responseFormat = responseFormatMap[deps.exerciseType];
 
     if (!responseFormat) {
-      throw new Error(
-        `Invalid exercise type: ${exerciseType}. Valid types are: ${Object.keys(
-          responseFormatMap,
-        ).join(', ')}`,
-      );
+      throw new Error(`Invalid exercise type: ${deps.exerciseType}`);
     }
 
     return createAgent({
       model: this.model,
       systemPrompt: QEPrompt,
       responseFormat,
-      checkpointer,
+      checkpointer: deps.memory,
       tools: [userTools.getUserInfo],
     });
   }

@@ -11,6 +11,11 @@ export interface AgentConfigurable {
   thread_id: string;
 }
 
+export type ConversationScope = {
+  userId: string;
+  conversationId: string; // NOT threadId
+};
+
 export interface AgentContext {
   user_id: string;
   class_level: number;

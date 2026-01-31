@@ -18,6 +18,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AcademicsModule } from './academics/academics.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { SseModule } from './sse/sse.module';
+import { PgMemoryModule } from './pg-memory/pg-memory.module';
 
 @Module({
   imports: [
@@ -97,6 +98,8 @@ import { SseModule } from './sse/sse.module';
     AcademicsModule,
 
     SseModule,
+
+    PgMemoryModule,
   ],
   controllers: [AppController],
   providers: [

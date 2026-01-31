@@ -13,7 +13,7 @@ type CreateCourseToolsArgs = {
 export function createCourseTools(args: CreateCourseToolsArgs) {
   const getSubtopicData = tool(
     async ({ subtopicId }) => {
-      const data = await args.academicSvc.getCourseSubtopicById(subtopicId);
+      const data = await args.academicSvc.getSubtopicById(subtopicId);
 
       if (!data.createdAt) throw new Error('Course not found');
 

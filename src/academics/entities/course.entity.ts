@@ -1,4 +1,12 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { CourseSubtopic } from 'src/academics/entities/course-subtopic.entity';
+import { Field } from 'src/academics/entities/field.entity';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  OneToMany,
+} from 'typeorm';
 
 export enum CourseType {
   CORE = 'core',
@@ -57,6 +65,12 @@ export class Course {
    */
   @Column({ name: 'syllabus', type: 'jsonb' })
   syllabus: string;
+
+  @ManyToOne(() => Field, (field) => field.courses)
+  field: Field;
+
+  @OneToMany(() => CourseSubtopic, (subtopic) => subtopic.course)
+  subtopics: CourseSubtopic[];
 
   /**
    * Structured / machine-friendly syllabus

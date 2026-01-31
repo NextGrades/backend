@@ -1,12 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { GetCoursesQuery } from 'src/academics/dtos/course-pagination.dto';
 import {
   CreateCourseDto,
   CreateCourseSubtopicDto,
 } from 'src/academics/dtos/create-course.dto';
 import { CourseSubtopic } from 'src/academics/entities/course-subtopic.entity';
 import { Course } from 'src/academics/entities/course.entity';
-import { SearchCoursesFilters } from 'src/academics/types';
+import {
+  CourseListItem,
+  PaginatedCoursesResponse,
+  SearchCoursesFilters,
+} from 'src/academics/types';
 import { Repository } from 'typeorm';
 
 @Injectable()
@@ -44,21 +49,80 @@ export class AcademicsService {
 
     return this.courseSubtopicRepo.save(subtopics); // saves all in one batch
   }
-  // async addNewCourseSubtopics(
-  //   data: CreateCourseSubtopicDto,
-  // ): Promise<CourseSubtopic> {
-  //   const course = await this.getCourseByCode(data.courseId);
-  //   if (!course) {
-  //     throw new NotFoundException(
-  //       `Course with id ${data.courseCode} not found`,
-  //     );
-  //   }
-  //   const courseSubtopics = this.courseSubtopicRepo.create({
-  //     ...data,
-  //     course: { id: course.id },
-  //   });
-  //   return this.courseSubtopicRepo.save(courseSubtopics);
-  // }
+
+  async getCourses(query: GetCoursesQuery): Promise<PaginatedCoursesResponse> {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(50, Math.max(1, Number(query.limit) || 10));
+    const offset = (page - 1) * limit;
+
+    /**
+     * Main query
+     */
+    const qb = this.courseRepo
+      .createQueryBuilder('course')
+      .leftJoin('course.field', 'field')
+      .leftJoin(
+        CourseSubtopic,
+        'subtopic',
+        'subtopic.courseId = course.id AND subtopic.is_active = true',
+      )
+      .select([
+        'course.id AS id',
+        'course.code AS "courseCode"',
+        'course.title AS title',
+        'field.name AS field',
+        'course.is_active AS "isActive"',
+        'COUNT(subtopic.id) AS "subtopicCount"',
+      ])
+      .groupBy('course.id')
+      .addGroupBy('field.name')
+      .orderBy('course.level', 'ASC')
+      .addOrderBy('course.title', 'ASC')
+      .offset(offset)
+      .limit(limit);
+
+    /**
+     * Total count (without pagination)
+     */
+    const total = await this.courseRepo.count();
+
+    const rawRows: CourseListItem[] = await qb.getRawMany();
+
+    const data = rawRows.map((row) => ({
+      id: row.id,
+      courseCode: row.courseCode,
+      title: row.title,
+      field: row.field ?? null,
+      subtopicCount: Number(row.subtopicCount),
+      isActive: row.isActive,
+    }));
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async addNewCourseSubtopic(
+    data: CreateCourseSubtopicDto,
+  ): Promise<CourseSubtopic> {
+    const course = await this.getCourseByCode(data.courseId);
+    if (!course) {
+      throw new NotFoundException(
+        `Course with id ${data.courseCode} not found`,
+      );
+    }
+    const courseSubtopics = this.courseSubtopicRepo.create({
+      ...data,
+      course: { id: course.id },
+    });
+    return this.courseSubtopicRepo.save(courseSubtopics);
+  }
 
   async generateCourseSubTopics(courseCode: string): Promise<string[]> {
     const course = await this.getCourseByCode(courseCode);
@@ -72,6 +136,13 @@ export class AcademicsService {
     // For simplicity, we return the structured syllabus as subtopics
     return course.syllabusStructured;
   }
+  async getCourseById(courseId: string): Promise<Course> {
+    const course = await this.courseRepo.findOneBy({ id: courseId });
+    if (!course) {
+      throw new NotFoundException(`Course with courseId ${courseId} not found`);
+    }
+    return course;
+  }
 
   async getCourseByCode(code: string): Promise<Course> {
     const course = await this.courseRepo.findOneBy({ code });
@@ -81,7 +152,7 @@ export class AcademicsService {
     return course;
   }
 
-  async getCourseSubtopicById(courseId: string): Promise<CourseSubtopic> {
+  async getSubtopicById(courseId: string): Promise<CourseSubtopic> {
     const courseSubtopic = await this.courseSubtopicRepo.findOne({
       where: { id: courseId },
       relations: {
@@ -101,9 +172,33 @@ export class AcademicsService {
         `Course with code ${courseId} does not have a structured syllabus`,
       );
     }
-
-    // For simplicity, we return the structured syllabus as subtopics
     return courseSubtopic;
+  }
+
+  async getCourseFullDetailsById(courseId: string): Promise<Course> {
+    const course = await this.courseRepo.findOne({
+      where: { id: courseId },
+      relations: {
+        subtopics: true,
+      },
+      order: {
+        subtopics: {
+          teachingOrder: 'ASC',
+        },
+      },
+    });
+
+    if (!course) {
+      throw new NotFoundException(`Course with id ${courseId} not found`);
+    }
+
+    if (!course.subtopics || course.subtopics.length === 0) {
+      throw new NotFoundException(
+        `Course with id ${courseId} does not have a structured syllabus`,
+      );
+    }
+
+    return course;
   }
 
   async searchCourses(

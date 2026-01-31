@@ -1,4 +1,4 @@
-import { utilities as nestWinstonModuleUtilities } from 'nest-winston';
+// import { utilities as nestWinstonModuleUtilities } from 'nest-winston';
 import * as winston from 'winston';
 import { format } from 'winston';
 import type { TransformableInfo } from 'logform';
@@ -41,19 +41,28 @@ const fileFormat = winston.format.combine(
  */
 const consoleTransport = new winston.transports.Console({
   level: isProduction ? 'info' : 'debug',
-  format: isProduction
-    ? winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.errors({ stack: true }),
-        winston.format.json(),
-      )
-    : winston.format.combine(
-        winston.format.timestamp(),
-        nestWinstonModuleUtilities.format.nestLike('NextGrades', {
-          prettyPrint: true,
-        }),
-      ),
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json(),
+  ),
 });
+
+// const consoleTransport = new winston.transports.Console({
+//   level: isProduction ? 'info' : 'debug',
+//   format: isProduction
+//     ? winston.format.combine(
+//         winston.format.timestamp(),
+//         winston.format.errors({ stack: true }),
+//         winston.format.json(),
+//       )
+//     : winston.format.combine(
+//         winston.format.timestamp(),
+//         nestWinstonModuleUtilities.format.nestLike('NextGrades', {
+//           prettyPrint: true,
+//         }),
+//       ),
+// });
 
 /**
  * File transports — DEV ONLY

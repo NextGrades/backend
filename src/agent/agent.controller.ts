@@ -33,8 +33,8 @@ export class AgentController {
     return ok({ jobId }, 'Teaching job enqueued: poll the jobId for status');
   }
 
-  @Get('teach/:jobId')
-  async getTeachingStatus(@Param('jobId') jobId: string) {
+  @Get('exercise-queue/:jobId')
+  async getJobsInExerciseQueueStatus(@Param('jobId') jobId: string) {
     const job = await this.exerciseQueue.getJob(jobId);
 
     if (!job) {
@@ -79,10 +79,8 @@ export class AgentController {
     const jobId = await this.agentService.generateQuickExercise(
       body.exerciseType,
       body.count,
-      {
-        configurable: { thread_id: body.threadId || 'quick-exercise-thread' },
-        context: { user_id: body.userId, class_level: body.classLevel },
-      },
+      body.userId,
+      body.threadId,
     );
     return ok(
       { jobId },
@@ -119,12 +117,10 @@ export class AgentController {
     @Body()
     body: SubtopicsDto,
   ) {
-    const data = await this.agentService.generateSubTopics(body.courseCode, {
-      configurable: {
-        thread_id: body.threadId || 'subtopic-generation-thread',
-      },
-      context: { user_id: 'system', level: 0 },
-    });
+    const data = await this.agentService.generateSubTopics(
+      'system',
+      body.courseCode,
+    );
     return ok(
       data,
       `Subtopic generation for ${body.courseCode} completed successfully`,

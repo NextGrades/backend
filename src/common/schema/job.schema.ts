@@ -1,12 +1,29 @@
 import { Job } from 'bullmq';
+import { FailureType } from 'src/common/errors/classify';
 import { PermanentError } from 'src/common/errors/error';
 import z from 'zod';
 
 // schema.ts
+export interface BaseJobData {
+  // your normal job fields here
+  userId?: string;
+  payload?: unknown;
+
+  __failure?: JobFailureEnvelope;
+}
+
+export type JobFailureEnvelope = {
+  failureType: FailureType;
+  code?: string;
+  meta?: Record<string, any>;
+  durationMs?: number;
+};
 
 export const JobGenCourseSchema = z.object({
-  userId: z.string().min(1),
-  threadId: z.string().min(1).optional(),
+  scope: z.object({
+    userId: z.string().min(1),
+    conversationId: z.string().min(1),
+  }),
   topicId: z.string().min(1),
 });
 
