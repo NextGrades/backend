@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const coursePrompt = `
+export const courseTutorPrompt = `
 You are an expert university-level teaching assistant and academic tutor.
 
 You have access to an official tool that retrieves structured university
@@ -12,7 +12,7 @@ course subtopic data, including:
 - teaching order and exam frequency
 
 CRITICAL RULES:
-1. You MUST base all teaching and exercises strictly on the retrieved
+1. You MUST base all teaching strictly on the retrieved
    subtopic data.
 2. If subtopic data is not already available, you MUST call the tool
    "get_subtopic_data" to retrieve it before responding.
@@ -26,18 +26,24 @@ TEACHING GUIDELINES:
 - Avoid oversimplification meant for children.
 - Stay strictly within the syllabus reference and topic description.
 
-EXERCISE GUIDELINES:
-- Every question must map directly to the syllabus reference or topic title.
-- Match difficulty to exam frequency and course level.
-- Include exam-style questions (theory, calculations, reasoning).
-- Always provide correct answers.
-- Explicitly state the syllabus item each question tests.
-
 OUTPUT RULES:
-- When teaching, respond ONLY in the teaching response format.
-- When generating exercises, respond ONLY in the exercise response format.
+- Respond ONLY in the course teaching response format.
 `;
 
+export const followUpSystemPrompt = `
+You are a follow-up teaching assistant. A teaching agent has already generated 
+structured course tutorial for a student. Your role is to:
+
+1. FIRST, call get_generated_content to retrieve what was taught.
+2. Answer the student's questions strictly based on that content.
+3. If they ask for clarification on examples, walk through them step by step.
+4. If they ask something outside the scope of the generated content, 
+   acknowledge it and redirect them back to the current topic.
+5. Do NOT re-teach the full content — only address what they're asking about.
+
+OUTPUT RULES:
+- respond with your answer/explanation in the specified response format.
+`;
 const CourseRefSchema = z.object({
   id: z.string(),
   code: z.string(),
@@ -118,6 +124,25 @@ export const courseExerciseResponseFormat = z.object({
   ),
 });
 
+export const followUpResponseFormat = z.object({
+  answer: z.string(),
+});
+
 export type courseExerciseResponse = z.infer<
   typeof courseExerciseResponseFormat
 >;
+
+export const contextSchema = z.object({
+  userId: z.string(),
+  conversationId: z.string(),
+});
+
+export const followUpInputSchema = z.object({
+  messages: z.array(
+    z.object({
+      role: z.enum(['user', 'assistant', 'system']),
+      content: z.string(),
+    }),
+  ),
+  previousLesson: courseTeachingResponseFormat,
+});

@@ -7,6 +7,7 @@ export type FailureType =
   | 'NETWORK'
   | 'SERVER'
   | 'CLIENT'
+  | 'TRANSIENT'
   | 'UNKNOWN'
   | 'PERMANENT';
 
@@ -27,6 +28,7 @@ interface ErrorWithName {
 type ClassifiableError = ErrorWithResponse & ErrorWithCode & ErrorWithName;
 
 export function classifyError(err: unknown, durationMs: number): FailureType {
+  console.log(err);
   const error = err as ClassifiableError;
   if (error instanceof PermanentError) return 'PERMANENT';
 

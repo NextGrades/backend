@@ -8,14 +8,12 @@ import {
   Post,
 } from '@nestjs/common';
 import { AgentService } from './agent.service';
-import { TeachAgentDto } from 'src/agent/dto/teach-agent.dto';
+import { AskAgentDto, TeachAgentDto } from 'src/agent/dto/teach-agent.dto';
 import { fail, ok } from 'src/common/http/response.helpers';
-import {
-  QuickExerciseDto,
-  SubtopicsDto,
-} from 'src/agent/dto/generate-agent.dto';
+import { SubtopicsDto } from 'src/agent/dto/generate-agent.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { SkipThrottle } from '@nestjs/throttler';
 
 @Controller('agent')
 export class AgentController {
@@ -29,10 +27,24 @@ export class AgentController {
     @Body()
     body: TeachAgentDto,
   ) {
-    const jobId = await this.agentService.teachTopic(body.userId, body.topicId);
-    return ok({ jobId }, 'Teaching job enqueued: poll the jobId for status');
+    const data = await this.agentService.teachTopic(body.userId, body.topicId);
+    return ok(data, 'Teaching job enqueued: poll the jobId for status');
   }
 
+  @Post('ask')
+  async ask(
+    @Body()
+    body: AskAgentDto,
+  ) {
+    const result = await this.agentService.askFollowUp(
+      body.userId,
+      body.conversationId,
+      body.question,
+    );
+    return ok(result);
+  }
+
+  @SkipThrottle()
   @Get('exercise-queue/:jobId')
   async getJobsInExerciseQueueStatus(@Param('jobId') jobId: string) {
     const job = await this.exerciseQueue.getJob(jobId);
@@ -69,23 +81,6 @@ export class AgentController {
       );
 
     return ok(exercises);
-  }
-
-  @Post('exercise/quick')
-  async quickExercise(
-    @Body()
-    body: QuickExerciseDto,
-  ) {
-    const jobId = await this.agentService.generateQuickExercise(
-      body.exerciseType,
-      body.count,
-      body.userId,
-      body.threadId,
-    );
-    return ok(
-      { jobId },
-      'Quick exercise generation job enqueued: poll the jobId for status',
-    );
   }
 
   @Get('exercise-status/:jobId')

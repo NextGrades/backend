@@ -4,7 +4,13 @@ import {
   Subtopic,
   SubtopicSchema,
 } from 'src/agent/schema/course-teacher.schema';
+
 import * as z from 'zod';
+
+// type AgentContext = {
+//   userId: string;
+//   conversationId: string;
+// };
 
 type CreateCourseToolsArgs = {
   academicSvc: AcademicsService;

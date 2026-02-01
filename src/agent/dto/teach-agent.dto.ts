@@ -9,3 +9,16 @@ export class TeachAgentDto {
   @IsNotEmpty()
   userId: string;
 }
+
+export class AskAgentDto {
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  conversationId: string;
+  @IsString()
+  @IsNotEmpty()
+  question: string;
+}

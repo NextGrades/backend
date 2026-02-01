@@ -4,26 +4,24 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { InMemoryStore } from '@langchain/langgraph';
 import { ConfigService } from '@nestjs/config';
 
-export const CHECKPOINTER = 'CHECKPOINTER';
-export const MEMORY_STORE = 'MEMORY_STORE';
+export const CHECKPOINTER = Symbol('CHECKPOINTER');
+export const MEMORY_STORE = Symbol('MEMORY_STORE');
 
 const CheckpointerProvider: FactoryProvider = {
   provide: CHECKPOINTER,
-  useFactory: async (configService: ConfigService) => {
-    const dbUri = configService.get<string>('DATABASE_URL')!;
-    const checkpointer = PostgresSaver.fromConnString(dbUri);
-    await checkpointer.setup(); // runs migrations
-    return checkpointer;
+  useFactory: async (config: ConfigService) => {
+    const saver = PostgresSaver.fromConnString(
+      config.get<string>('DATABASE_URL')!,
+    );
+    await saver.setup();
+    return saver;
   },
   inject: [ConfigService],
 };
 
 const MemoryStoreProvider: FactoryProvider = {
   provide: MEMORY_STORE,
-  useFactory: () => {
-    // JS LangGraph ONLY supports in-memory store
-    return new InMemoryStore();
-  },
+  useFactory: () => new InMemoryStore(),
 };
 
 @Module({

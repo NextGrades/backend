@@ -7,6 +7,7 @@ import { LoggerModule } from 'src/logger/logger.module';
 import { BullModule } from '@nestjs/bullmq';
 import { ExerciseProcessor } from 'src/agent/agent.processor';
 import { AcademicsModule } from 'src/academics/academics.module';
+import { PgMemoryModule } from 'src/pg-memory/pg-memory.module';
 
 export const QUEUE__EXERCISE = 'exercise';
 
@@ -15,6 +16,7 @@ export const QUEUE__EXERCISE = 'exercise';
   providers: [AgentService, AgentFactory, ExerciseProcessor],
   exports: [AgentService],
   imports: [
+    PgMemoryModule,
     CurriculumModule,
     AcademicsModule,
     LoggerModule,

@@ -1,29 +1,41 @@
-// src/agent/factory/agent.factory.ts
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { MemorySaver } from '@langchain/langgraph';
 import { createAgent } from 'langchain';
+import { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
+import { InMemoryStore } from '@langchain/langgraph';
+
 import { createUserTools } from 'src/agent/tools/user.tools';
-import { ExerciseType } from 'src/agent/interface/agent.interface';
-import { responseFormatMap } from 'src/agent/schema/quick-exercise.schema';
-import { QEPrompt } from 'src/agent/schema/teaching-agent.schema';
+import { createCourseTools } from 'src/agent/tools/course.tools';
+import { AcademicsService } from 'src/academics/academics.service';
 import {
   subtopicGeneratorResponseFormat,
   subtopicPrompt,
 } from 'src/agent/schema/subtopic.schema';
-import { AcademicsService } from 'src/academics/academics.service';
-import { createCourseTools } from 'src/agent/tools/course.tools';
 import {
-  coursePrompt,
+  contextSchema,
+  CourseTeachingResponse,
   courseTeachingResponseFormat,
+  courseTutorPrompt,
+  followUpResponseFormat,
+  followUpSystemPrompt,
 } from 'src/agent/schema/course-teacher.schema';
+import { CHECKPOINTER, MEMORY_STORE } from 'src/pg-memory/pg-memory.module';
+import { createAgentTools } from 'src/agent/tools/agent.tools';
 
 @Injectable()
 export class AgentFactory {
   private readonly model: ChatGoogleGenerativeAI;
 
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+
+    @Inject(CHECKPOINTER)
+    private readonly checkpointer: BaseCheckpointSaver,
+
+    @Inject(MEMORY_STORE)
+    private readonly store: InMemoryStore,
+  ) {
     const apiKey = configService.get<string>('GOOGLE_API_KEY');
     if (!apiKey) throw new Error('GOOGLE_API_KEY not set');
 
@@ -34,61 +46,53 @@ export class AgentFactory {
     });
   }
 
-  /* ---------------- Shared tools ---------------- */
-
-  private createUserTools() {
-    return createUserTools();
-  }
-
-  private createCourseTools(academicsSvc: AcademicsService) {
-    return createCourseTools({ academicSvc: academicsSvc });
-  }
-
   /* ---------------- Agents ---------------- */
 
-  createCourseTeachingAgent(deps: {
-    memory: MemorySaver;
-    academicsSvc: AcademicsService;
-  }) {
-    const userTools = this.createUserTools();
-    const courseTools = this.createCourseTools(deps.academicsSvc);
+  createCourseTeachingAgent(academicsSvc: AcademicsService) {
+    const userTools = createUserTools();
+    const courseTools = createCourseTools({ academicSvc: academicsSvc });
 
     return createAgent({
       model: this.model,
-      systemPrompt: coursePrompt,
+      systemPrompt: courseTutorPrompt,
       responseFormat: courseTeachingResponseFormat,
-      checkpointer: deps.memory,
+      checkpointer: this.checkpointer,
       tools: [userTools.getUserInfo, courseTools.getSubtopicData],
+      contextSchema,
     });
   }
 
-  createSubTopicGeneratorAgent(deps: { memory: MemorySaver }) {
+  createFollowUpAgent() {
+    const agentTools = createAgentTools();
+    return createAgent({
+      model: this.model,
+      systemPrompt: followUpSystemPrompt,
+      checkpointer: this.checkpointer,
+      responseFormat: followUpResponseFormat,
+      store: this.store,
+      tools: [agentTools.getGeneratedContent],
+      contextSchema,
+    });
+  }
+  summarizeLesson(lesson: CourseTeachingResponse) {
+    return `
+Course: ${lesson.courseTitle}
+Subtopic: ${lesson.topic}
+Key points:
+- ${lesson.keyConcepts.join('\n- ')}
+Examples:
+- ${lesson.workedExamples.slice(0, 3).join('\n- ')}
+`;
+  }
+
+  createSubTopicGeneratorAgent() {
     return createAgent({
       model: this.model,
       systemPrompt: subtopicPrompt,
       responseFormat: subtopicGeneratorResponseFormat,
-      checkpointer: deps.memory,
+      checkpointer: this.checkpointer,
+      store: this.store,
       tools: [],
-    });
-  }
-
-  createExerciseGeneratorAgent(deps: {
-    exerciseType: ExerciseType;
-    memory: MemorySaver;
-  }) {
-    const userTools = this.createUserTools();
-    const responseFormat = responseFormatMap[deps.exerciseType];
-
-    if (!responseFormat) {
-      throw new Error(`Invalid exercise type: ${deps.exerciseType}`);
-    }
-
-    return createAgent({
-      model: this.model,
-      systemPrompt: QEPrompt,
-      responseFormat,
-      checkpointer: deps.memory,
-      tools: [userTools.getUserInfo],
     });
   }
 }
