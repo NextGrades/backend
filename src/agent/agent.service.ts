@@ -104,7 +104,7 @@ export class AgentService {
             signal,
           },
         ),
-      60_000,
+      100,
     );
 
     const validated = followUpResponseFormat.safeParse(

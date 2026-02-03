@@ -72,7 +72,6 @@ export class ExerciseProcessor extends WorkerHost {
       userId = jobData.scope.userId;
       conversationId = jobData.scope.conversationId;
       jobMode = jobData.mode;
-      console.log('JOB_DATA', jobData);
 
       const agent = this.agentFactory.createCourseTeachingAgent(
         this.academicsSvc,

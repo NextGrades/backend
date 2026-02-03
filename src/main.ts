@@ -14,7 +14,11 @@ async function bootstrap() {
 
   // CORS
   app.enableCors({
-    origin: ['http://localhost:5173', 'https://nextgrades.netlify.app'],
+    origin: [
+      'http://localhost:5173',
+      'https://nextgrades.netlify.app',
+      'http://localhost:4173',
+    ],
     credentials: true,
   });
 

@@ -1,3 +1,4 @@
+import { PushSubscriptionEntity } from 'src/push-subscription/entities/push-subscription.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -5,6 +6,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  OneToMany,
 } from 'typeorm';
 
 export enum UserRole {
@@ -44,6 +46,9 @@ export class User {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @OneToMany(() => PushSubscriptionEntity, (p) => p.user)
+  pushSubscriptions: PushSubscriptionEntity[];
 
   @CreateDateColumn()
   createdAt: Date;

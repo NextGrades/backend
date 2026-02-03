@@ -9,11 +9,12 @@ import {
 } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { AskAgentDto, TeachAgentDto } from 'src/agent/dto/teach-agent.dto';
-import { fail, ok } from 'src/common/http/response.helpers';
+import { ok } from 'src/common/http/response.helpers';
 import { SubtopicsDto } from 'src/agent/dto/generate-agent.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { SkipThrottle } from '@nestjs/throttler';
+import { ApiRequestError } from 'src/common/http/api-response';
 
 @Controller('agent')
 export class AgentController {
@@ -44,6 +45,20 @@ export class AgentController {
     return ok(result);
   }
 
+  @Post('exercise')
+  async exercise(
+    @Body()
+    body: TeachAgentDto,
+  ) {
+    const exercises =
+      await this.agentService.generateExercisesFromTaughtContent(
+        body.userId,
+        body.topicId,
+      );
+
+    return ok(exercises);
+  }
+
   @SkipThrottle()
   @Get('exercise-queue/:jobId')
   async getJobsInExerciseQueueStatus(@Param('jobId') jobId: string) {
@@ -60,51 +75,13 @@ export class AgentController {
     }
 
     if (state === 'failed') {
-      return fail(
-        job.failedReason || 'Job failed',
-        `${HttpStatus.FAILED_DEPENDENCY}`,
-      );
+      throw new ApiRequestError({
+        message: job.failedReason || 'Job failed',
+        statusCode: HttpStatus.FAILED_DEPENDENCY,
+      });
     }
 
-    return { status: state };
-  }
-
-  @Post('exercise')
-  async exercise(
-    @Body()
-    body: TeachAgentDto,
-  ) {
-    const exercises =
-      await this.agentService.generateExercisesFromTaughtContent(
-        body.userId,
-        body.topicId,
-      );
-
-    return ok(exercises);
-  }
-
-  @Get('exercise-status/:jobId')
-  async getExerciseStatus(@Param('jobId') jobId: string) {
-    const job = await this.exerciseQueue.getJob(jobId);
-
-    if (!job) {
-      throw new NotFoundException('Job not found');
-    }
-
-    const state = await job.getState();
-
-    if (state === 'completed') {
-      return ok(job.returnvalue, 'Job completed successfully');
-    }
-
-    if (state === 'failed') {
-      return fail(
-        job.failedReason || 'Job failed',
-        `${HttpStatus.FAILED_DEPENDENCY}`,
-      );
-    }
-
-    return { status: state };
+    return ok({ status: state }, 'this job is still getting processed');
   }
 
   @Post('courses/subtopics')

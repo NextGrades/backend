@@ -20,6 +20,9 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { SseModule } from './sse/sse.module';
 import { PgMemoryModule } from './pg-memory/pg-memory.module';
 
+import { PushSubscriptionModule } from './push-subscription/push-subscription.module';
+import { PushNotificationModule } from './push-notification/push-notification.module';
+
 @Module({
   imports: [
     AuthModule,
@@ -100,6 +103,10 @@ import { PgMemoryModule } from './pg-memory/pg-memory.module';
     SseModule,
 
     PgMemoryModule,
+
+    PushSubscriptionModule,
+
+    PushNotificationModule,
   ],
   controllers: [AppController],
   providers: [

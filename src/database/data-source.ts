@@ -7,6 +7,7 @@ import { Course } from 'src/academics/entities/course.entity';
 import { CourseSubtopic } from 'src/academics/entities/course-subtopic.entity';
 import { Field } from 'src/academics/entities/field.entity';
 import { EducationStandard } from 'src/academics/entities/edu-standard.entity';
+import { PushSubscriptionEntity } from 'src/push-subscription/entities/push-subscription.entity';
 
 // Load .env for CLI usage
 config();
@@ -14,7 +15,14 @@ config();
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
-  entities: [User, Course, CourseSubtopic, Field, EducationStandard],
+  entities: [
+    User,
+    Course,
+    CourseSubtopic,
+    Field,
+    EducationStandard,
+    PushSubscriptionEntity,
+  ],
   migrations: ['src/database/migrations/*.ts'],
   synchronize: false,
   logging: false,
