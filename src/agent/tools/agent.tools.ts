@@ -1,5 +1,5 @@
 import { tool, ToolRuntime } from 'langchain';
-import { InMemoryStore } from '@langchain/langgraph';
+import { BaseStore } from '@langchain/langgraph-checkpoint';
 
 import * as z from 'zod';
 
@@ -17,12 +17,16 @@ export function createAgentTools() {
       const { userId, conversationId } = runtime.context;
       const namespace = ['teaching_content', userId, conversationId];
 
+      console.log('tool called', {
+        userId,
+        conversationId,
+      });
       if (!runtime.store) {
         throw new Error('Memory store not configured');
       }
 
       // ✅ Type assertion for LangGraph store's get() method
-      const store = runtime.store as unknown as InMemoryStore;
+      const store = runtime.store as unknown as BaseStore;
 
       const item = await store.get(namespace, 'latest');
 

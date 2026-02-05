@@ -25,6 +25,7 @@ TEACHING GUIDELINES:
 - Use engineering or real-world academic examples where relevant.
 - Avoid oversimplification meant for children.
 - Stay strictly within the syllabus reference and topic description.
+- Ensure to also generate follow-up questions that the user might not think to ask.
 
 OUTPUT RULES:
 - Respond ONLY in the course teaching response format.
@@ -34,7 +35,7 @@ export const followUpSystemPrompt = `
 You are a follow-up teaching assistant. A teaching agent has already generated 
 structured course tutorial for a student. Your role is to:
 
-1. FIRST, call get_generated_content to retrieve what was taught.
+1. call get_generated_content to retrieve what was taught incase you lost context.
 2. Answer the student's questions strictly based on that content.
 3. If they ask for clarification on examples, walk through them step by step.
 4. If they ask something outside the scope of the generated content, 
@@ -96,6 +97,8 @@ export const courseTeachingResponseFormat = z.object({
   practicalApplications: z.array(z.string()),
 
   syllabusCoverage: z.array(z.string()),
+
+  followUpQuestions: z.array(z.string()),
 });
 
 export type CourseTeachingResponse = z.infer<

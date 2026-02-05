@@ -2,10 +2,12 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  RequestTimeoutException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { v7 as uuidv7 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 import { HttpLogger } from 'src/logger/http-logger.service';
 import { AcademicsService } from 'src/academics/academics.service';
@@ -13,8 +15,9 @@ import { AgentFactory } from 'src/agent/agent.factory';
 import { followUpResponseFormat } from 'src/agent/schema/course-teacher.schema';
 import { JOB_MODE } from 'src/common/types';
 import { withTimeout } from 'src/common/errors/withTimeout';
-import { InMemoryStore } from '@langchain/langgraph';
-import { MEMORY_STORE } from 'src/pg-memory/pg-memory.module';
+import { BaseStore } from '@langchain/langgraph-checkpoint';
+import { REDIS_MEMORY_STORE } from 'src/pg-memory/pg-memory.module';
+import { classifyError } from 'src/common/errors/classify';
 
 @Injectable()
 export class AgentService {
@@ -24,8 +27,8 @@ export class AgentService {
     private readonly logger: HttpLogger,
     private readonly academicSvc: AcademicsService,
     private readonly agentFactory: AgentFactory,
-    @Inject(MEMORY_STORE)
-    private readonly store: InMemoryStore,
+    @Inject(REDIS_MEMORY_STORE)
+    private readonly store: BaseStore,
   ) {}
 
   // ======================================================
@@ -35,7 +38,7 @@ export class AgentService {
   private createConversationScope(userId: string) {
     return {
       userId,
-      conversationId: uuidv7(),
+      conversationId: randomUUID(),
     };
   }
 
@@ -44,7 +47,7 @@ export class AgentService {
   // ======================================================
 
   async teachTopic(userId: string, topicId: string) {
-    const jobId = uuidv7();
+    const jobId = randomUUID();
     const scope = this.createConversationScope(userId);
     const mode = JOB_MODE.INTERACTIVE;
 
@@ -84,38 +87,66 @@ export class AgentService {
   }
 
   async askFollowUp(userId: string, conversationId: string, question: string) {
-    const namespace = ['teaching_content', userId, conversationId];
+    try {
+      console.log('FOLLOW-UP QUESTION:', question);
 
-    const stored = await this.store.get(namespace, 'latest');
-    const memory = stored?.value;
-    console.log('MEMORY LOADED', memory);
-    const followUpAgent = this.agentFactory.createFollowUpAgent();
+      const followUpAgent = this.agentFactory.createFollowUpAgent();
 
-    const result = await withTimeout(
-      (signal) =>
-        followUpAgent.invoke(
-          {
-            messages: [{ role: 'user', content: question }],
-          },
-          {
-            recursionLimit: 8,
-            configurable: { thread_id: conversationId },
-            context: { userId, conversationId },
-            signal,
-          },
-        ),
-      100,
-    );
+      const result = await withTimeout(
+        (signal) =>
+          followUpAgent.invoke(
+            {
+              messages: [{ role: 'user', content: question }],
+            },
+            {
+              recursionLimit: 8,
+              configurable: { thread_id: conversationId },
+              context: { userId, conversationId },
+              signal,
+            },
+          ),
+        60_000,
+      );
 
-    const validated = followUpResponseFormat.safeParse(
-      result.structuredResponse,
-    );
+      console.log('FOLLOW-UP RESULT:', result);
 
-    if (!validated.success) {
-      throw new InternalServerErrorException(validated.error.message);
+      const validated = followUpResponseFormat.safeParse(
+        result.structuredResponse,
+      );
+
+      if (!validated.success) {
+        throw new InternalServerErrorException(
+          'Invalid response format from AI agent',
+        );
+      }
+
+      return validated.data;
+    } catch (err) {
+      console.log('follo-up agent err', err);
+      const failureType = classifyError(err, 60_000);
+
+      switch (failureType) {
+        case 'RATE_LIMIT':
+          throw new ServiceUnavailableException(
+            'AI service is temporarily rate limited. Try again shortly.',
+          );
+        case 'TIMEOUT':
+          throw new RequestTimeoutException(
+            'AI service took too long to respond.',
+          );
+        case 'NETWORK':
+        case 'SERVER':
+          throw new ServiceUnavailableException(
+            'AI service is currently unavailable.',
+          );
+        case 'PERMANENT':
+          throw err;
+        default:
+          throw new InternalServerErrorException(
+            'Failed to process follow-up request.',
+          );
+      }
     }
-
-    return validated.data;
   }
 
   // ======================================================
@@ -126,7 +157,7 @@ export class AgentService {
     userId: string,
     conversationId: string,
   ) {
-    const jobId = uuidv7();
+    const jobId = randomUUID();
 
     this.logger.log(
       {
@@ -161,7 +192,7 @@ export class AgentService {
   // ======================================================
 
   async generateSubTopics(userId: string, courseCode: string) {
-    const jobId = uuidv7();
+    const jobId = randomUUID();
     const scope = this.createConversationScope(userId);
 
     this.logger.log(

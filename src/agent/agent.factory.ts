@@ -2,8 +2,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { createAgent } from 'langchain';
-import { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
-import { InMemoryStore } from '@langchain/langgraph';
+import {
+  BaseCheckpointSaver,
+  BaseStore,
+} from '@langchain/langgraph-checkpoint';
+// import { InMemoryStore } from '@langchain/langgraph';
 
 import { createUserTools } from 'src/agent/tools/user.tools';
 import { createCourseTools } from 'src/agent/tools/course.tools';
@@ -20,7 +23,10 @@ import {
   followUpResponseFormat,
   followUpSystemPrompt,
 } from 'src/agent/schema/course-teacher.schema';
-import { CHECKPOINTER, MEMORY_STORE } from 'src/pg-memory/pg-memory.module';
+import {
+  CHECKPOINTER,
+  REDIS_MEMORY_STORE,
+} from 'src/pg-memory/pg-memory.module';
 import { createAgentTools } from 'src/agent/tools/agent.tools';
 
 @Injectable()
@@ -33,8 +39,8 @@ export class AgentFactory {
     @Inject(CHECKPOINTER)
     private readonly checkpointer: BaseCheckpointSaver,
 
-    @Inject(MEMORY_STORE)
-    private readonly store: InMemoryStore,
+    @Inject(REDIS_MEMORY_STORE)
+    private readonly store: BaseStore,
   ) {
     const apiKey = configService.get<string>('GOOGLE_API_KEY');
     if (!apiKey) throw new Error('GOOGLE_API_KEY not set');

@@ -1,0 +1,13 @@
+services:
+  redis:
+    image: redis/redis-stack:latest
+    container_name: ngrades-redis-stack
+    ports:
+      - "6380:6379"   # Redis (same Redis instance)
+      - "8001:8001"   # RedisInsight GUI
+    volumes:
+      - ngrades_stack_data:/data
+    restart: unless-stopped
+
+volumes:
+  ngrades_stack_data:

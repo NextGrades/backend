@@ -15,8 +15,10 @@ import { classifyError } from 'src/common/errors/classify';
 import { PermanentError } from 'src/common/errors/error';
 import { JOB_MODE } from 'src/common/types';
 import { Inject } from '@nestjs/common';
-import { InMemoryStore } from '@langchain/langgraph';
-import { MEMORY_STORE } from 'src/pg-memory/pg-memory.module';
+// import { InMemoryStore } from '@langchain/langgraph';
+import { REDIS_MEMORY_STORE } from 'src/pg-memory/pg-memory.module';
+import { BaseStore } from '@langchain/langgraph-checkpoint';
+// import { MEMORY_STORE } from 'src/pg-memory/pg-memory.module';
 
 const BASE_DELAY = 75_000; // 75 seconds
 const MAX_UNKNOWN_RETRIES = 5;
@@ -27,8 +29,8 @@ export class ExerciseProcessor extends WorkerHost {
     private readonly agentFactory: AgentFactory,
     private readonly logger: SystemLogger,
     private readonly academicsSvc: AcademicsService,
-    @Inject(MEMORY_STORE)
-    private readonly store: InMemoryStore,
+    @Inject(REDIS_MEMORY_STORE)
+    private readonly store: BaseStore,
   ) {
     super();
   }
@@ -121,6 +123,7 @@ export class ExerciseProcessor extends WorkerHost {
 
       return validated.data;
     } catch (error) {
+      console.log(error);
       const duration = Date.now() - start;
 
       await this.handleJobError(
